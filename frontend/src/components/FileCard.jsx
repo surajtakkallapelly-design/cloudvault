@@ -19,7 +19,8 @@ import {
   X,
   FolderInput,
   Star,
-  RotateCcw
+  RotateCcw,
+  Eye
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -78,8 +79,13 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
   const { color, icon: FileIcon, label: typeLabel } = getFileTypeDetails(file.fileType);
 
   const handleDownload = () => {
-    const tokenParam = user?.token ? `?token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}${tokenParam}`, '_blank');
+    const tokenParam = user?.token ? `&token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}?download=true${tokenParam}`, '_blank');
+  };
+
+  const handleView = () => {
+    const tokenParam = user?.token ? `&token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}?view=true${tokenParam}`, '_blank');
   };
 
   const handleToggleStar = async (e) => {
@@ -292,11 +298,19 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
         ) : (
           <>
             <button
+              onClick={handleView}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold py-2.5 md:py-2 text-white transition-colors cursor-pointer border-0 shadow-md shadow-indigo-650/10"
+              title="View/Open File"
+            >
+              <Eye className="h-3.5 w-3.5" /> View
+            </button>
+
+            <button
               onClick={handleDownload}
-              className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 text-xs font-semibold py-2.5 md:py-2 text-zinc-700 dark:text-zinc-200 transition-colors cursor-pointer animate-none"
+              className="flex h-10 w-10 md:h-8 md:w-8 items-center justify-center rounded-lg bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
               title="Secure Download"
             >
-              <Download className="h-3.5 w-3.5" /> Download
+              <Download className="h-3.5 w-3.5" />
             </button>
 
             <button

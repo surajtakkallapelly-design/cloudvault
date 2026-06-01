@@ -18,7 +18,8 @@ import {
   Trash2,
   Calendar,
   Lock,
-  Globe
+  Globe,
+  Eye
 } from 'lucide-react';
 
 export default function FileList({ files, loading, refreshFiles, searchVal, filterSharedOnly }) {
@@ -63,8 +64,13 @@ export default function FileList({ files, loading, refreshFiles, searchVal, filt
 
   // Handle file download securely via backend API
   const handleDownload = (s3Key) => {
-    const tokenParam = user?.token ? `?token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${s3Key}${tokenParam}`, '_blank');
+    const tokenParam = user?.token ? `&token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${s3Key}?download=true${tokenParam}`, '_blank');
+  };
+
+  const handleView = (s3Key) => {
+    const tokenParam = user?.token ? `&token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${s3Key}?view=true${tokenParam}`, '_blank');
   };
 
   // Handle toggling file share status
@@ -222,10 +228,19 @@ export default function FileList({ files, loading, refreshFiles, searchVal, filt
                 {/* Footer actions */}
                 <div className="mt-4 flex items-center gap-2 border-t border-slate-900/40 pt-3">
                   <button
-                    onClick={() => handleDownload(file.s3Key)}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-xs font-semibold py-2 text-slate-200 transition-colors cursor-pointer"
+                    onClick={() => handleView(file.s3Key)}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold py-2 text-white border-0 transition-colors cursor-pointer shadow-md shadow-indigo-650/10"
+                    title="View File"
                   >
-                    <Download className="h-3.5 w-3.5" /> Download
+                    <Eye className="h-3.5 w-3.5" /> View
+                  </button>
+
+                  <button
+                    onClick={() => handleDownload(file.s3Key)}
+                    className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                    title="Download"
+                  >
+                    <Download className="h-3.5 w-3.5" />
                   </button>
                   
                   {file.isShared && (
@@ -307,8 +322,16 @@ export default function FileList({ files, loading, refreshFiles, searchVal, filt
                     <td className="px-5 py-3 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
                         <button
+                          onClick={() => handleView(file.s3Key)}
+                          className="rounded-lg p-1.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-transparent hover:border-slate-800 transition-all cursor-pointer"
+                          title="View File"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+
+                        <button
                           onClick={() => handleDownload(file.s3Key)}
-                          className="rounded-lg p-1.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-transparent hover:border-slate-800 transition-all cursor-pointer animate-none"
+                          className="rounded-lg p-1.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-transparent hover:border-slate-800 transition-all cursor-pointer"
                           title="Download"
                         >
                           <Download className="h-4 w-4" />

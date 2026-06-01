@@ -239,14 +239,23 @@ export const getDownloadUrl = async (req, res) => {
 
     // Deliver file URL or direct file download stream
     let finalUrl = '';
+    const isDownload = req.query.download === 'true';
+
     if (isAWSConfigured()) {
       // Generate a signed URL for reading the object
       const { GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const command = new GetObjectCommand({
+      const s3Params = {
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: s3Key,
-      });
+      };
 
+      if (isDownload) {
+        s3Params.ResponseContentDisposition = `attachment; filename="${file.fileName}"`;
+      } else {
+        s3Params.ResponseContentDisposition = 'inline';
+      }
+
+      const command = new GetObjectCommand(s3Params);
       finalUrl = await getSignedUrl(getS3Client(), command, { expiresIn: 3600 });
     } else {
       // Deliver the local mock file download stream or URL

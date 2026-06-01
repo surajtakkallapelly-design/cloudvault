@@ -23,7 +23,8 @@ import {
   Pencil,
   X,
   Star,
-  RotateCcw
+  RotateCcw,
+  Eye
 } from 'lucide-react';
 import FileCard from './FileCard';
 import { useAuth } from '../context/AuthContext';
@@ -111,8 +112,13 @@ export default function FileGrid({
   };
 
   const handleDownload = (s3Key) => {
-    const tokenParam = user?.token ? `?token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${s3Key}${tokenParam}`, '_blank');
+    const tokenParam = user?.token ? `&token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${s3Key}?download=true${tokenParam}`, '_blank');
+  };
+
+  const handleView = (s3Key) => {
+    const tokenParam = user?.token ? `&token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${s3Key}?view=true${tokenParam}`, '_blank');
   };
 
   const handleCopyLink = (s3Key, fileId) => {
@@ -416,6 +422,14 @@ export default function FileGrid({
                           </>
                         ) : (
                           <>
+                             <button
+                              onClick={() => handleView(file.s3Key)}
+                              className="rounded-lg p-3 md:p-1.5 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 transition-all cursor-pointer shadow-xs"
+                              title="View File"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+
                              <button
                               onClick={() => handleDownload(file.s3Key)}
                               className="rounded-lg p-3 md:p-1.5 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 transition-all cursor-pointer shadow-xs"
