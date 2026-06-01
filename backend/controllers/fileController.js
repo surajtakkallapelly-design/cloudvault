@@ -210,6 +210,13 @@ export const getDownloadUrl = async (req, res) => {
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       try {
         token = req.headers.authorization.split(' ')[1];
+      } catch (err) {}
+    } else if (req.query.token) {
+      token = req.query.token;
+    }
+
+    if (token) {
+      try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
         requesterId = decoded.id;
       } catch (err) {
@@ -217,7 +224,7 @@ export const getDownloadUrl = async (req, res) => {
       }
     }
 
-    if (requesterId && requesterId === file.owner._id.toString()) {
+    if (requesterId && file.owner && requesterId === file.owner._id.toString()) {
       hasAccess = true;
     } else if (file.isShared) {
       // Check link expiration
@@ -231,6 +238,7 @@ export const getDownloadUrl = async (req, res) => {
     }
 
     // Deliver file URL or direct file download stream
+    let finalUrl = '';
     if (isAWSConfigured()) {
       // Generate a signed URL for reading the object
       const { GetObjectCommand } = await import('@aws-sdk/client-s3');
@@ -239,14 +247,18 @@ export const getDownloadUrl = async (req, res) => {
         Key: s3Key,
       });
 
-      const readUrl = await getSignedUrl(getS3Client(), command, { expiresIn: 3600 });
-      res.json({ downloadUrl: readUrl, isLocal: false });
+      finalUrl = await getSignedUrl(getS3Client(), command, { expiresIn: 3600 });
     } else {
       // Deliver the local mock file download stream or URL
       const host = req.get('host');
       const protocol = req.protocol;
-      const downloadUrl = `${protocol}://${host}/uploads/${s3Key}`;
-      res.json({ downloadUrl, isLocal: true });
+      finalUrl = `${protocol}://${host}/uploads/${s3Key}`;
+    }
+
+    if (req.query.json === 'true') {
+      res.json({ downloadUrl: finalUrl, isLocal: !isAWSConfigured() });
+    } else {
+      res.redirect(finalUrl);
     }
   } catch (error) {
     console.error('Error generating download URL:', error);

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 export default function FileList({ files, loading, refreshFiles, searchVal, filterSharedOnly }) {
-  const { api, apiBaseUrl } = useAuth();
+  const { api, apiBaseUrl, user } = useAuth();
   const [viewMode, setViewMode] = useState('grid');
   const [copyingId, setCopyingId] = useState(null);
   const [sharingLoading, setSharingLoading] = useState(null);
@@ -62,15 +62,9 @@ export default function FileList({ files, loading, refreshFiles, searchVal, filt
   };
 
   // Handle file download securely via backend API
-  const handleDownload = async (s3Key) => {
-    try {
-      const { data } = await api.get(`/api/files/download/${s3Key}`);
-      // Open direct URL in new tab
-      window.open(data.downloadUrl, '_blank');
-    } catch (err) {
-      console.error('Download trigger failed:', err);
-      alert('Could not generate secure link: ' + (err.response?.data?.message || err.message));
-    }
+  const handleDownload = (s3Key) => {
+    const tokenParam = user?.token ? `?token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${s3Key}${tokenParam}`, '_blank');
   };
 
   // Handle toggling file share status

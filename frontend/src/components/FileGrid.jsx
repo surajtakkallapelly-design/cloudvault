@@ -39,7 +39,7 @@ export default function FileGrid({
   currentTab = 'my-files', 
   onShareClick 
 }) {
-  const { api, apiBaseUrl } = useAuth();
+  const { api, apiBaseUrl, user } = useAuth();
   const [viewMode, setViewMode] = useState('grid');
   const [copyingId, setCopyingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -110,13 +110,9 @@ export default function FileGrid({
     return { color: 'text-slate-400 bg-slate-500/10 border-slate-500/20', icon: File };
   };
 
-  const handleDownload = async (s3Key) => {
-    try {
-      const { data } = await api.get(`/api/files/download/${s3Key}`);
-      window.open(data.downloadUrl, '_blank');
-    } catch (err) {
-      alert('Failed to generate secure link: ' + (err.response?.data?.message || err.message));
-    }
+  const handleDownload = (s3Key) => {
+    const tokenParam = user?.token ? `?token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${s3Key}${tokenParam}`, '_blank');
   };
 
   const handleCopyLink = (s3Key, fileId) => {

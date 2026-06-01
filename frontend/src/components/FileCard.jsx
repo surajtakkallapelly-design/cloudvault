@@ -24,7 +24,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshFiles, folders = [] }) {
-  const { api, apiBaseUrl } = useAuth();
+  const { api, apiBaseUrl, user } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [copying, setCopying] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -77,13 +77,9 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
 
   const { color, icon: FileIcon, label: typeLabel } = getFileTypeDetails(file.fileType);
 
-  const handleDownload = async () => {
-    try {
-      const { data } = await api.get(`/api/files/download/${file.s3Key}`);
-      window.open(data.downloadUrl, '_blank');
-    } catch (err) {
-      alert('Download link generation failed: ' + (err.response?.data?.message || err.message));
-    }
+  const handleDownload = () => {
+    const tokenParam = user?.token ? `?token=${user.token}` : '';
+    window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}${tokenParam}`, '_blank');
   };
 
   const handleToggleStar = async (e) => {
