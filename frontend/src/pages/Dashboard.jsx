@@ -156,7 +156,7 @@ export default function Dashboard() {
   const fetchFiles = async () => {
     try {
       setLoading(true);
-      if (currentTab === 'shared') {
+      if (currentTab === 'shared' && activeFolder === 'Root') {
         const { data } = await api.get('/api/files/shared-with-me');
         setFiles(data);
       } else {
@@ -165,7 +165,7 @@ export default function Dashboard() {
           type: fileTypeFilter,
           starred: currentTab === 'starred' ? 'true' : 'false',
           trash: currentTab === 'trash' ? 'true' : 'false',
-          folder: currentTab === 'my-files' ? activeFolder : '',
+          folder: (currentTab === 'my-files' || (currentTab === 'shared' && activeFolder !== 'Root')) ? activeFolder : '',
           folderOwner: activeFolderOwner || '',
           search: searchVal
         };

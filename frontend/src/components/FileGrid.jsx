@@ -199,13 +199,15 @@ export default function FileGrid({
     } else if (currentTab === 'starred') {
       matchesTab = file.isStarred && !file.isTrashed;
     } else if (currentTab === 'shared') {
-      matchesTab = file.isShared && !file.isTrashed;
+      matchesTab = !file.isTrashed;
     } else if (currentTab === 'trash') {
       matchesTab = file.isTrashed;
     }
 
-    // Folder check: bypass folder filter if there's a search term or if we are not on 'my-files' tab
-    const bypassFolder = !!searchVal || currentTab !== 'my-files';
+    // Folder check: bypass folder filter if searching, not on my-files/shared, or at the Root of Shared tab
+    const bypassFolder = !!searchVal || 
+                         (currentTab !== 'my-files' && currentTab !== 'shared') || 
+                         (currentTab === 'shared' && activeFolder === 'Root');
     const matchesFolder = bypassFolder ? true : (file.folder || 'Root') === activeFolder;
 
     return matchesSearch && matchesTab && matchesFolder;
