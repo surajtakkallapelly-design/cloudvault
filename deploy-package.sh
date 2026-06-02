@@ -25,6 +25,7 @@ cp -R backend/controllers deploy/backend/
 cp -R backend/middleware deploy/backend/
 cp -R backend/models deploy/backend/
 cp -R backend/routes deploy/backend/
+cp -R backend/services deploy/backend/
 cp backend/server.js deploy/backend/
 cp backend/package.json deploy/backend/
 cp backend/package-lock.json deploy/backend/
