@@ -124,12 +124,42 @@ export const AuthProvider = ({ children }) => {
     setUser(updated);
   };
 
+  // Request password reset OTP
+  const requestOtp = async (email) => {
+    try {
+      const { data } = await axios.post(`${API_BASE_URL}/api/auth/forgot-password`, { email });
+      return { success: true, message: data.message };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to request OTP. Please try again.';
+      return { success: false, error: message };
+    }
+  };
+
+  // Verify OTP and reset password
+  const resetPassword = async (email, otp, newPassword) => {
+    try {
+      const { data } = await axios.post(`${API_BASE_URL}/api/auth/reset-password`, {
+        email,
+        otp,
+        newPassword,
+      });
+      localStorage.setItem('user', JSON.stringify(data));
+      setUser(data);
+      return { success: true };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to reset password. Please try again.';
+      return { success: false, error: message };
+    }
+  };
+
   const value = {
     user,
     loading,
     login,
     signup,
     logout,
+    requestOtp,
+    resetPassword,
     theme,
     toggleTheme,
     updateUser,
