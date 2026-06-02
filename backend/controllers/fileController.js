@@ -410,6 +410,17 @@ export const getDownloadUrl = async (req, res) => {
       }
     }
 
+    if (!hasAccess && req.query.emailToken) {
+      try {
+        const decoded = jwt.verify(req.query.emailToken, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
+        if (decoded.fileId === file._id.toString() && file.sharedWith.some(share => share.email.toLowerCase() === decoded.email.toLowerCase())) {
+          hasAccess = true;
+        }
+      } catch (err) {
+        // Email token verification failed or expired
+      }
+    }
+
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied: File is private or link has expired' });
     }
@@ -754,24 +765,44 @@ export const shareFileWithUser = async (req, res) => {
       const appUrl = 'https://cloudvault-anurag.duckdns.org';
       const permissionLabel = permission === 'edit' ? 'Editor (Read-Write)' : 'Viewer (Read-only)';
       
+      const host = req.get('host');
+      let protocol = req.protocol;
+      if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+        protocol = 'https';
+      }
+
+      // Generate direct access token valid for 7 days
+      const emailToken = jwt.sign(
+        { email: email.toLowerCase(), fileId: file._id },
+        process.env.JWT_SECRET || 'your_jwt_secret_key_here',
+        { expiresIn: '7d' }
+      );
+      const directAccessUrl = `${protocol}://${host}/api/files/download/${encodeURIComponent(file.s3Key)}?emailToken=${emailToken}`;
+
       const subject = `[CloudVault] File shared with you: ${file.fileName}`;
       const text = isRegistered
-        ? `Hi there,\n\n${req.user.name} (${req.user.email}) has shared the file "${file.fileName}" with you on CloudVault as ${permissionLabel}.\n\nLog in to your workspace at ${appUrl} to access it.\n\nBest regards,\nCloudVault Support`
-        : `Hi there,\n\n${req.user.name} (${req.user.email}) has shared the file "${file.fileName}" with you on CloudVault as ${permissionLabel}.\n\nYou do not have a CloudVault account associated with this email address yet. Register for a free account at ${appUrl} using this email to instantly access the shared file!\n\nBest regards,\nCloudVault Support`;
+        ? `Hi there,\n\n${req.user.name} (${req.user.email}) has shared the file "${file.fileName}" with you on CloudVault as ${permissionLabel}.\n\nYou can access it directly using the link below:\n\n${directAccessUrl}\n\nOr log in to your workspace at ${appUrl} to access it.\n\nBest regards,\nCloudVault Support`
+        : `Hi there,\n\n${req.user.name} (${req.user.email}) has shared the file "${file.fileName}" with you on CloudVault as ${permissionLabel}.\n\nYou can view and download this file directly without registering an account using the link below:\n\n${directAccessUrl}\n\nAdditionally, you can register for a free account at ${appUrl} using this email address to save and manage all shared files in your own secure vault workspace!\n\nBest regards,\nCloudVault Support`;
 
       const html = isRegistered
         ? `<div style="font-family: sans-serif; padding: 20px; color: #1f2937;">
              <h3>File Shared With You</h3>
              <p><strong>${req.user.name}</strong> (<em>${req.user.email}</em>) has shared the file <strong>${file.fileName}</strong> with you as <strong>${permissionLabel}</strong>.</p>
-             <p>Log in to your workspace at <a href="${appUrl}" target="_blank">${appUrl}</a> to access it.</p>
+             <p style="margin: 20px 0;">
+               <a href="${directAccessUrl}" target="_blank" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Access Shared File</a>
+             </p>
+             <p>Or log in to your workspace at <a href="${appUrl}" target="_blank">${appUrl}</a> to access it.</p>
              <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
              <p style="font-size: 11px; color: #6b7280;">This is an automated notification from CloudVault.</p>
            </div>`
         : `<div style="font-family: sans-serif; padding: 20px; color: #1f2937;">
              <h3>File Shared With You</h3>
              <p><strong>${req.user.name}</strong> (<em>${req.user.email}</em>) has shared the file <strong>${file.fileName}</strong> with you as <strong>${permissionLabel}</strong>.</p>
-             <p style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5;">
-               <strong>Action Required:</strong> You don't have a CloudVault account yet. Register for a free account at <a href="${appUrl}" target="_blank">${appUrl}</a> using this email address to instantly view and download your shared file.
+             <p style="margin: 20px 0;">
+               <a href="${directAccessUrl}" target="_blank" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Access Shared File directly</a>
+             </p>
+             <p style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5; margin-top: 20px;">
+               <strong>No account required:</strong> You can view and download the file immediately by clicking the button above. If you want to keep track of this and other shared files, register for a free CloudVault account at <a href="${appUrl}" target="_blank">${appUrl}</a> using this email address.
              </p>
              <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
              <p style="font-size: 11px; color: #6b7280;">This is an automated notification from CloudVault.</p>
