@@ -65,12 +65,12 @@ export default function FileList({ files, loading, refreshFiles, searchVal, filt
   // Handle file download securely via backend API
   const handleDownload = (s3Key) => {
     const tokenParam = user?.token ? `&token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${s3Key}?download=true${tokenParam}`, '_blank');
+    window.open(`${apiBaseUrl}/api/files/download/${encodeURIComponent(s3Key)}?download=true${tokenParam}`, '_blank');
   };
 
   const handleView = (s3Key) => {
     const tokenParam = user?.token ? `&token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${s3Key}?view=true${tokenParam}`, '_blank');
+    window.open(`${apiBaseUrl}/api/files/download/${encodeURIComponent(s3Key)}?view=true${tokenParam}`, '_blank');
   };
 
   // Handle toggling file share status
@@ -91,7 +91,7 @@ export default function FileList({ files, loading, refreshFiles, searchVal, filt
 
   // Handle copying direct download link to clipboard
   const handleCopyLink = (s3Key, fileId) => {
-    const link = `${apiBaseUrl}/api/files/download/${s3Key}`;
+    const link = `${apiBaseUrl}/api/files/download/${encodeURIComponent(s3Key)}`;
     navigator.clipboard.writeText(link).then(() => {
       setCopyingId(fileId);
       setTimeout(() => setCopyingId(null), 2000);

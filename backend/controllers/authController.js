@@ -1,6 +1,9 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import admin from 'firebase-admin';
+import Folder from '../models/Folder.js';
+import File from '../models/File.js';
+
 
 // Helper to determine if Firebase credentials are fully configured
 const isFirebaseConfigured = () => {
@@ -69,6 +72,23 @@ export const registerUser = async (req, res) => {
     });
 
     if (user) {
+      // Link previous unregistered shares matching this email
+      const userEmail = user.email.toLowerCase();
+      try {
+        await Folder.updateMany(
+          { "sharedWith.email": userEmail },
+          { $set: { "sharedWith.$[elem].user": user._id } },
+          { arrayFilters: [{ "elem.email": userEmail }] }
+        );
+        await File.updateMany(
+          { "sharedWith.email": userEmail },
+          { $set: { "sharedWith.$[elem].user": user._id } },
+          { arrayFilters: [{ "elem.email": userEmail }] }
+        );
+      } catch (dbErr) {
+        console.error('Failed to link pending shares on signup:', dbErr);
+      }
+
       res.status(201).json({
         _id: user._id,
         name: user.name,

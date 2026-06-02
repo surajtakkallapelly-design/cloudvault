@@ -27,6 +27,7 @@ export const UploadProvider = ({ children }) => {
         params: {
           fileName: file.name,
           fileType: file.type || 'application/octet-stream',
+          fileSize: file.size,
         },
       });
 
@@ -72,9 +73,17 @@ export const UploadProvider = ({ children }) => {
 
     const storageLimit = 20 * 1024 * 1024 * 1024; // 20 GB free-tier cap
     
-    // Check if adding all files will exceed limit
+    // Check if adding all files will exceed limit using global API if possible
     const totalNewSize = filesArray.reduce((sum, f) => sum + f.size, 0);
-    if (currentTotalSize + totalNewSize > storageLimit) {
+    let currentGlobalSize = currentTotalSize;
+    try {
+      const { data: usageData } = await api.get('/api/files/storage-usage');
+      currentGlobalSize = usageData.totalSize || 0;
+    } catch (err) {
+      console.warn('Failed to fetch storage usage, falling back to local size:', err.message);
+    }
+
+    if (currentGlobalSize + totalNewSize > storageLimit) {
       alert(`Upload Blocked: Adding these files would exceed your vault storage limit of 20 GB.`);
       return;
     }

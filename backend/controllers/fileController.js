@@ -8,6 +8,7 @@ import File from '../models/File.js';
 import Folder from '../models/Folder.js';
 import User from '../models/User.js';
 import { ZipArchive } from 'archiver';
+import { sendEmail } from '../services/emailService.js';
 
 // Determine if we should run in mock S3 mode (to help developers test locally without AWS credentials)
 const isAWSConfigured = () => {
@@ -39,17 +40,43 @@ const getS3Client = () => {
   return s3Client;
 };
 
+const calculateUserStorage = async (userId) => {
+  const files = await File.find({ owner: userId });
+  let totalSize = 0;
+  let filesCount = 0;
+
+  files.forEach(f => {
+    totalSize += (f.fileSize || 0);
+    filesCount += 1;
+    if (f.versions && f.versions.length > 0) {
+      f.versions.forEach(v => {
+        totalSize += (v.fileSize || 0);
+      });
+    }
+  });
+
+  return { totalSize, filesCount };
+};
+
 // @desc    Get presigned S3 URL for file upload
 // @route   GET /api/files/upload-url
 // @access  Private
 export const getUploadUrl = async (req, res) => {
-  const { fileName, fileType } = req.query;
+  const { fileName, fileType, fileSize } = req.query;
 
   if (!fileName || !fileType) {
     return res.status(400).json({ message: 'Please provide fileName and fileType query parameters' });
   }
 
   try {
+    const size = parseInt(fileSize, 10);
+    if (!isNaN(size)) {
+      const { totalSize } = await calculateUserStorage(req.user._id);
+      if (totalSize + size > 20 * 1024 * 1024 * 1024) {
+        return res.status(400).json({ message: 'Upload Blocked: Adding this file would exceed your vault storage limit of 20 GB.' });
+      }
+    }
+
     const s3Key = `${uuidv4()}-${fileName}`;
 
     if (isAWSConfigured()) {
@@ -133,6 +160,14 @@ export const saveFileMetadata = async (req, res) => {
   }
 
   try {
+    const size = parseInt(fileSize, 10);
+    if (!isNaN(size)) {
+      const { totalSize } = await calculateUserStorage(req.user._id);
+      if (totalSize + size > 20 * 1024 * 1024 * 1024) {
+        return res.status(400).json({ message: 'Upload Blocked: Adding this file would exceed your vault storage limit of 20 GB.' });
+      }
+    }
+
     const targetFolder = folder || 'Root';
     // Check if file with same name already exists in same folder for this user and isn't trashed
     let file = await File.findOne({ fileName, folder: targetFolder, owner: req.user._id, isTrashed: false });
@@ -175,10 +210,25 @@ export const saveFileMetadata = async (req, res) => {
 // @route   GET /api/files/my-files
 // @access  Private
 export const getMyFiles = async (req, res) => {
-  const { type, starred, trash, sortBy, search, folder } = req.query;
+  const { type, starred, trash, sortBy, search, folder, folderOwner } = req.query;
 
   try {
-    const query = { owner: req.user._id };
+    let ownerId = req.user._id;
+
+    // Check if we are browsing a shared folder
+    if (folder && folder !== 'Root' && folderOwner && trash !== 'true' && starred !== 'true' && !search) {
+      const sharedFolder = await Folder.findOne({
+        name: folder,
+        owner: folderOwner,
+        'sharedWith.user': req.user._id,
+        isTrashed: false
+      });
+      if (sharedFolder) {
+        ownerId = folderOwner;
+      }
+    }
+
+    const query = { owner: ownerId };
 
     // Folder scoping
     if (folder) {
@@ -341,7 +391,19 @@ export const getDownloadUrl = async (req, res) => {
       hasAccess = true;
     } else if (requesterId && file.sharedWith && file.sharedWith.some(share => share.user && share.user.toString() === requesterId)) {
       hasAccess = true;
-    } else if (file.isShared) {
+    } else if (requesterId && file.folder && file.folder !== 'Root') {
+      const parentFolder = await Folder.findOne({
+        name: file.folder,
+        owner: file.owner,
+        'sharedWith.user': requesterId,
+        isTrashed: false
+      });
+      if (parentFolder) {
+        hasAccess = true;
+      }
+    }
+    
+    if (!hasAccess && file.isShared) {
       // Check link expiration
       if (!file.sharedLinkExpiresAt || new Date() < new Date(file.sharedLinkExpiresAt)) {
         hasAccess = true;
@@ -653,35 +715,79 @@ export const shareFileWithUser = async (req, res) => {
       return res.status(404).json({ message: 'File not found or unauthorized access' });
     }
 
-    // Find the user to share with
+    // Find the user to share with (optional)
     const targetUser = await User.findOne({ email: email.toLowerCase() });
-    if (!targetUser) {
-      return res.status(404).json({ message: 'User not found with this email' });
-    }
-
-    if (targetUser._id.toString() === req.user._id.toString()) {
+    if (targetUser && targetUser._id.toString() === req.user._id.toString()) {
       return res.status(400).json({ message: 'You cannot share files with yourself' });
     }
 
-    const isAlreadyShared = file.sharedWith.some(
-      (share) => share.user.toString() === targetUser._id.toString()
-    );
+    let isAlreadyShared;
+    if (targetUser) {
+      isAlreadyShared = file.sharedWith.some(
+        (share) => (share.user && share.user.toString() === targetUser._id.toString()) || share.email.toLowerCase() === email.toLowerCase()
+      );
+    } else {
+      isAlreadyShared = file.sharedWith.some(
+        (share) => share.email.toLowerCase() === email.toLowerCase()
+      );
+    }
 
     if (isAlreadyShared) {
       file.sharedWith = file.sharedWith.map((share) =>
-        share.user.toString() === targetUser._id.toString()
+        share.email.toLowerCase() === email.toLowerCase()
           ? { ...share, permission: permission || 'view' }
           : share
       );
     } else {
       file.sharedWith.push({
-        user: targetUser._id,
-        email: targetUser.email,
+        user: targetUser ? targetUser._id : undefined,
+        email: email.toLowerCase(),
         permission: permission || 'view'
       });
     }
 
     await file.save();
+
+    // Send email notification (registered or unregistered)
+    try {
+      const isRegistered = !!targetUser;
+      const appUrl = 'https://cloudvault-anurag.duckdns.org';
+      const permissionLabel = permission === 'edit' ? 'Editor (Read-Write)' : 'Viewer (Read-only)';
+      
+      const subject = `[CloudVault] File shared with you: ${file.fileName}`;
+      const text = isRegistered
+        ? `Hi there,\n\n${req.user.name} (${req.user.email}) has shared the file "${file.fileName}" with you on CloudVault as ${permissionLabel}.\n\nLog in to your workspace at ${appUrl} to access it.\n\nBest regards,\nCloudVault Support`
+        : `Hi there,\n\n${req.user.name} (${req.user.email}) has shared the file "${file.fileName}" with you on CloudVault as ${permissionLabel}.\n\nYou do not have a CloudVault account associated with this email address yet. Register for a free account at ${appUrl} using this email to instantly access the shared file!\n\nBest regards,\nCloudVault Support`;
+
+      const html = isRegistered
+        ? `<div style="font-family: sans-serif; padding: 20px; color: #1f2937;">
+             <h3>File Shared With You</h3>
+             <p><strong>${req.user.name}</strong> (<em>${req.user.email}</em>) has shared the file <strong>${file.fileName}</strong> with you as <strong>${permissionLabel}</strong>.</p>
+             <p>Log in to your workspace at <a href="${appUrl}" target="_blank">${appUrl}</a> to access it.</p>
+             <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+             <p style="font-size: 11px; color: #6b7280;">This is an automated notification from CloudVault.</p>
+           </div>`
+        : `<div style="font-family: sans-serif; padding: 20px; color: #1f2937;">
+             <h3>File Shared With You</h3>
+             <p><strong>${req.user.name}</strong> (<em>${req.user.email}</em>) has shared the file <strong>${file.fileName}</strong> with you as <strong>${permissionLabel}</strong>.</p>
+             <p style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5;">
+               <strong>Action Required:</strong> You don't have a CloudVault account yet. Register for a free account at <a href="${appUrl}" target="_blank">${appUrl}</a> using this email address to instantly view and download your shared file.
+             </p>
+             <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+             <p style="font-size: 11px; color: #6b7280;">This is an automated notification from CloudVault.</p>
+           </div>`;
+
+      await sendEmail({
+        to: email.toLowerCase(),
+        subject,
+        text,
+        html
+      });
+      console.log(`[Email] Sharing notification sent successfully to ${email}`);
+    } catch (emailErr) {
+      console.error('[Email] Failed to send sharing notification email:', emailErr.message);
+    }
+
     const updatedFile = await File.findById(fileId).populate('sharedWith.user', 'name email');
     res.json(updatedFile);
   } catch (error) {
@@ -693,6 +799,7 @@ export const shareFileWithUser = async (req, res) => {
 // @desc    Revoke file access for a user
 // @route   DELETE /api/files/share/:fileId/:userId
 // @access  Private
+// export const removeFileShare = async (req, res) => {
 export const removeFileShare = async (req, res) => {
   const { fileId, userId } = req.params;
 
@@ -702,9 +809,15 @@ export const removeFileShare = async (req, res) => {
       return res.status(404).json({ message: 'File not found or unauthorized access' });
     }
 
-    file.sharedWith = file.sharedWith.filter(
-      (share) => share.user.toString() !== userId
-    );
+    if (userId.includes('@')) {
+      file.sharedWith = file.sharedWith.filter(
+        (share) => share.email.toLowerCase() !== userId.toLowerCase()
+      );
+    } else {
+      file.sharedWith = file.sharedWith.filter(
+        (share) => !share.user || share.user.toString() !== userId
+      );
+    }
 
     await file.save();
     const updatedFile = await File.findById(fileId).populate('sharedWith.user', 'name email');
@@ -1095,5 +1208,209 @@ export const bulkDownloadFiles = async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ message: 'Bulk download failed', error: error.message });
     }
+  }
+};
+
+// @desc    Share a folder with a user
+// @route   POST /api/files/folders/share/:folderId
+// @access  Private
+export const shareFolderWithUser = async (req, res) => {
+  const { folderId } = req.params;
+  const { email, permission } = req.body;
+
+  try {
+    if (!email) {
+      return res.status(400).json({ message: 'Please provide an email address' });
+    }
+
+    const folder = await Folder.findOne({ _id: folderId, owner: req.user._id });
+    if (!folder) {
+      return res.status(404).json({ message: 'Folder not found or unauthorized access' });
+    }
+
+    // Find the user to share with (optional)
+    const targetUser = await User.findOne({ email: email.toLowerCase() });
+    if (targetUser && targetUser._id.toString() === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot share folders with yourself' });
+    }
+
+    let isAlreadyShared;
+    if (targetUser) {
+      isAlreadyShared = folder.sharedWith.some(
+        (share) => (share.user && share.user.toString() === targetUser._id.toString()) || share.email.toLowerCase() === email.toLowerCase()
+      );
+    } else {
+      isAlreadyShared = folder.sharedWith.some(
+        (share) => share.email.toLowerCase() === email.toLowerCase()
+      );
+    }
+
+    if (isAlreadyShared) {
+      folder.sharedWith = folder.sharedWith.map((share) =>
+        share.email.toLowerCase() === email.toLowerCase()
+          ? { ...share, permission: permission || 'view' }
+          : share
+      );
+    } else {
+      folder.sharedWith.push({
+        user: targetUser ? targetUser._id : undefined,
+        email: email.toLowerCase(),
+        permission: permission || 'view'
+      });
+    }
+
+    await folder.save();
+
+    // Send email notification (registered or unregistered)
+    try {
+      const isRegistered = !!targetUser;
+      const appUrl = 'https://cloudvault-anurag.duckdns.org';
+      const permissionLabel = permission === 'edit' ? 'Editor (Read-Write)' : 'Viewer (Read-only)';
+      
+      const subject = `[CloudVault] Folder shared with you: ${folder.name}`;
+      const text = isRegistered
+        ? `Hi there,\n\n${req.user.name} (${req.user.email}) has shared the folder "${folder.name}" with you on CloudVault as ${permissionLabel}.\n\nLog in to your workspace at ${appUrl} to access it.\n\nBest regards,\nCloudVault Support`
+        : `Hi there,\n\n${req.user.name} (${req.user.email}) has shared the folder "${folder.name}" with you on CloudVault as ${permissionLabel}.\n\nYou do not have a CloudVault account associated with this email address yet. Register for a free account at ${appUrl} using this email to instantly access the shared folder!\n\nBest regards,\nCloudVault Support`;
+
+      const html = isRegistered
+        ? `<div style="font-family: sans-serif; padding: 20px; color: #1f2937;">
+             <h3>Folder Shared With You</h3>
+             <p><strong>${req.user.name}</strong> (<em>${req.user.email}</em>) has shared the folder <strong>${folder.name}</strong> with you as <strong>${permissionLabel}</strong>.</p>
+             <p>Log in to your workspace at <a href="${appUrl}" target="_blank">${appUrl}</a> to access it.</p>
+             <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+             <p style="font-size: 11px; color: #6b7280;">This is an automated notification from CloudVault.</p>
+           </div>`
+        : `<div style="font-family: sans-serif; padding: 20px; color: #1f2937;">
+             <h3>Folder Shared With You</h3>
+             <p><strong>${req.user.name}</strong> (<em>${req.user.email}</em>) has shared the folder <strong>${folder.name}</strong> with you as <strong>${permissionLabel}</strong>.</p>
+             <p style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5;">
+               <strong>Action Required:</strong> You don't have a CloudVault account yet. Register for a free account at <a href="${appUrl}" target="_blank">${appUrl}</a> using this email address to instantly view and collaborate inside your shared folder.
+             </p>
+             <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+             <p style="font-size: 11px; color: #6b7280;">This is an automated notification from CloudVault.</p>
+           </div>`;
+
+      await sendEmail({
+        to: email.toLowerCase(),
+        subject,
+        text,
+        html
+      });
+      console.log(`[Email] Sharing notification sent successfully to ${email}`);
+    } catch (emailErr) {
+      console.error('[Email] Failed to send sharing notification email:', emailErr.message);
+    }
+
+    const updatedFolder = await Folder.findById(folderId).populate('sharedWith.user', 'name email');
+    res.json(updatedFolder);
+  } catch (error) {
+    console.error('Error sharing folder:', error);
+    res.status(500).json({ message: 'Failed to share folder', error: error.message });
+  }
+};
+
+// @desc    Revoke folder access for a user
+// @route   DELETE /api/files/folders/share/:folderId/:userId
+// @access  Private
+export const removeFolderShare = async (req, res) => {
+  const { folderId, userId } = req.params;
+
+  try {
+    const folder = await Folder.findOne({ _id: folderId, owner: req.user._id });
+    if (!folder) {
+      return res.status(404).json({ message: 'Folder not found or unauthorized access' });
+    }
+
+    if (userId.includes('@')) {
+      folder.sharedWith = folder.sharedWith.filter(
+        (share) => share.email.toLowerCase() !== userId.toLowerCase()
+      );
+    } else {
+      folder.sharedWith = folder.sharedWith.filter(
+        (share) => !share.user || share.user.toString() !== userId
+      );
+    }
+
+    await folder.save();
+    const updatedFolder = await Folder.findById(folderId).populate('sharedWith.user', 'name email');
+    res.json(updatedFolder);
+  } catch (error) {
+    console.error('Error removing folder share:', error);
+    res.status(500).json({ message: 'Failed to remove sharing', error: error.message });
+  }
+};
+
+// @desc    Get all folders shared with the current user
+// @route   GET /api/files/folders/shared-with-me
+// @access  Private
+export const getSharedFoldersWithMe = async (req, res) => {
+  try {
+    const folders = await Folder.find({
+      'sharedWith.user': req.user._id,
+      isTrashed: false
+    }).populate('owner', 'name email').sort({ name: 1 });
+
+    res.json(folders);
+  } catch (error) {
+    console.error('Error fetching shared folders:', error);
+    res.status(500).json({ message: 'Failed to fetch shared folders', error: error.message });
+  }
+};
+
+// @desc    Get global storage stats for user
+// @route   GET /api/files/storage-usage
+// @access  Private
+export const getStorageUsage = async (req, res) => {
+  try {
+    const files = await File.find({ owner: req.user._id });
+    let totalSize = 0;
+    let filesCount = 0;
+
+    const categories = {
+      Images: { size: 0, count: 0 },
+      Videos: { size: 0, count: 0 },
+      Documents: { size: 0, count: 0 },
+      Archives: { size: 0, count: 0 },
+      Others: { size: 0, count: 0 }
+    };
+
+    files.forEach(file => {
+      const fileSize = file.fileSize || 0;
+      const versionsSize = (file.versions || []).reduce((sum, v) => sum + (v.fileSize || 0), 0);
+      const combinedSize = fileSize + versionsSize;
+
+      totalSize += combinedSize;
+      filesCount += 1;
+
+      const type = (file.fileType || '').toLowerCase();
+      const ext = (file.fileName || '').split('.').pop().toLowerCase();
+
+      if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+        categories.Images.size += combinedSize;
+        categories.Images.count += 1;
+      } else if (type.startsWith('video/') || ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'].includes(ext)) {
+        categories.Videos.size += combinedSize;
+        categories.Videos.count += 1;
+      } else if (type.startsWith('audio/') || type.includes('pdf') || type.includes('word') || type.includes('excel') || ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md'].includes(ext)) {
+        categories.Documents.size += combinedSize;
+        categories.Documents.count += 1;
+      } else if (type.includes('zip') || type.includes('tar') || type.includes('rar') || ['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) {
+        categories.Archives.size += combinedSize;
+        categories.Archives.count += 1;
+      } else {
+        categories.Others.size += combinedSize;
+        categories.Others.count += 1;
+      }
+    });
+
+    res.json({
+      totalSize,
+      filesCount,
+      categories,
+      storageLimit: 20 * 1024 * 1024 * 1024 // 20 GB
+    });
+  } catch (error) {
+    console.error('Error fetching storage usage:', error);
+    res.status(500).json({ message: 'Failed to fetch storage usage', error: error.message });
   }
 };

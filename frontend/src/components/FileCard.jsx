@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Image, 
@@ -20,7 +20,8 @@ import {
   FolderInput,
   Star,
   RotateCcw,
-  Eye
+  Eye,
+  MoreVertical
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -31,6 +32,25 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(file.fileName);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+
+  useEffect(() => {
+    if (!showActionsMenu) return;
+    const closeMenu = (e) => {
+      if (!e.target.closest('.menu-container')) {
+        setShowActionsMenu(false);
+      }
+    };
+    document.addEventListener('click', closeMenu);
+    return () => document.removeEventListener('click', closeMenu);
+  }, [showActionsMenu]);
+
+  const handleCardClick = (e) => {
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('a') || e.target.closest('.select-checkbox-container')) {
+      return;
+    }
+    handleView();
+  };
 
   const handleMoveFile = async (folderName) => {
     try {
@@ -80,7 +100,7 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
 
   const handleDownload = () => {
     const tokenParam = user?.token ? `&token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}?download=true${tokenParam}`, '_blank');
+    window.open(`${apiBaseUrl}/api/files/download/${encodeURIComponent(file.s3Key)}?download=true${tokenParam}`, '_blank');
   };
 
   const handleView = () => {
@@ -88,7 +108,7 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
       onViewFile(file);
     } else {
       const tokenParam = user?.token ? `&token=${user.token}` : '';
-      window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}?view=true${tokenParam}`, '_blank');
+      window.open(`${apiBaseUrl}/api/files/download/${encodeURIComponent(file.s3Key)}?view=true${tokenParam}`, '_blank');
     }
   };
 
@@ -157,7 +177,7 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
   };
 
   const handleCopyLink = () => {
-    const link = `${apiBaseUrl}/api/files/download/${file.s3Key}`;
+    const link = `${apiBaseUrl}/api/files/download/${encodeURIComponent(file.s3Key)}`;
     navigator.clipboard.writeText(link).then(() => {
       setCopying(true);
       setTimeout(() => setCopying(false), 2000);
@@ -167,11 +187,14 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
   const isFileSelected = selectedFileIds.includes(file._id);
 
   return (
-    <div className={`group relative flex flex-col justify-between min-h-[175px] rounded-2xl border p-5 transition-all duration-300 ease-in-out hover:-translate-y-1 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-2xl hover:shadow-indigo-500/5 hover:bg-zinc-90-selected dark:hover:bg-zinc-900/45 ${
-      isFileSelected
-        ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-950/20 shadow-md'
-        : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'
-    }`}>
+    <div 
+      onClick={handleCardClick}
+      className={`group relative flex flex-col justify-between min-h-[175px] rounded-2xl border p-5 transition-all duration-300 ease-in-out hover:-translate-y-1 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-2xl hover:shadow-indigo-500/5 hover:bg-zinc-90-selected dark:hover:bg-zinc-900/45 cursor-pointer ${
+        isFileSelected
+          ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-950/20 shadow-md'
+          : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'
+      }`}
+    >
       
       {/* File Select Checkbox */}
       <div
@@ -221,14 +244,131 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
           )}
 
           {file.isShared ? (
-            <span className="flex items-center gap-1 rounded-full border border-indigo-200 dark:border-indigo-500/20 bg-indigo-50 dark:bg-indigo-500/5 px-2.5 py-0.5 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+            <span className="flex items-center gap-1 rounded-full border border-indigo-200 dark:border-indigo-500/20 bg-indigo-50 dark:bg-indigo-500/5 px-2 py-0.5 text-[9px] font-bold text-indigo-650 dark:text-indigo-400 uppercase tracking-wider">
               <Globe className="h-2.5 w-2.5" /> Public
             </span>
           ) : (
-            <span className="flex items-center gap-1 rounded-full border border-zinc-300 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/60 px-2.5 py-0.5 text-[9px] font-bold text-zinc-700 dark:text-zinc-400 uppercase tracking-wider">
+            <span className="flex items-center gap-1 rounded-full border border-zinc-300 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/60 px-2 py-0.5 text-[9px] font-bold text-zinc-705 dark:text-zinc-400 uppercase tracking-wider">
               <Lock className="h-2.5 w-2.5" /> Private
             </span>
           )}
+
+          {/* Elegant Options Menu (Three Dots) for Mobile & Desktop */}
+          <div className="relative menu-container">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowActionsMenu(!showActionsMenu);
+              }}
+              className="p-1.5 rounded-lg border bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+              title="File Actions"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </button>
+
+            {showActionsMenu && (
+              <div 
+                className="absolute right-0 mt-1.5 z-40 w-44 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1.5 shadow-xl text-left" 
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleView();
+                  }}
+                  className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer border-0 bg-transparent"
+                >
+                  <Eye className="h-3.5 w-3.5 text-indigo-500" /> View / Open
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleDownload();
+                  }}
+                  className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer border-0 bg-transparent"
+                >
+                  <Download className="h-3.5 w-3.5" /> Download
+                </button>
+                {!file.isTrashed && (
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      setIsEditing(true);
+                    }}
+                    className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer border-0 bg-transparent"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Rename
+                  </button>
+                )}
+                {!file.isTrashed && (
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      setShowMoveMenu(true);
+                    }}
+                    className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer border-0 bg-transparent"
+                  >
+                    <FolderInput className="h-3.5 w-3.5" /> Move to...
+                  </button>
+                )}
+                {!file.isTrashed && (
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      onShareClick(file);
+                    }}
+                    className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer border-0 bg-transparent"
+                  >
+                    <Share2 className="h-3.5 w-3.5" /> Share settings
+                  </button>
+                )}
+                {file.isShared && !file.isTrashed && (
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      handleCopyLink();
+                    }}
+                    className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer border-0 bg-transparent"
+                  >
+                    <Copy className="h-3.5 w-3.5" /> Copy Link
+                  </button>
+                )}
+                <div className="border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
+                {file.isTrashed ? (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        setShowActionsMenu(false);
+                        handleRestore(e);
+                      }}
+                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer border-0 bg-transparent"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 text-indigo-500" /> Restore
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        setShowActionsMenu(false);
+                        handleTrashOrDelete(e);
+                      }}
+                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/5 cursor-pointer border-0 bg-transparent"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-rose-500" /> Purge File
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      setShowActionsMenu(false);
+                      handleTrashOrDelete(e);
+                    }}
+                    className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/5 cursor-pointer border-0 bg-transparent"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-rose-500" /> Move to Trash
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -307,8 +447,8 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
             ))}
           </div>
         </div>
-      )}      {/* Hover action overlay panel (revealed on hover) */}
-      <div className="absolute inset-x-4 bottom-4 flex items-center gap-1 bg-white dark:bg-zinc-950 py-2.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 transform translate-y-1 group-hover:translate-y-0 border-t border-zinc-200 dark:border-zinc-900/50">
+      )}      {/* Hover action overlay panel (revealed on hover, hidden on mobile) */}
+      <div className="hidden md:flex absolute inset-x-4 bottom-4 items-center gap-1 bg-white dark:bg-zinc-950 py-2.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 transform translate-y-1 group-hover:translate-y-0 border-t border-zinc-200 dark:border-zinc-900/50">
         {file.isTrashed ? (
           <div className="flex-1 flex gap-2">
             <button

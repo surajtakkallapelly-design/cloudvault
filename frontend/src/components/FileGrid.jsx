@@ -24,7 +24,8 @@ import {
   X,
   Star,
   RotateCcw,
-  Eye
+  Eye,
+  Users
 } from 'lucide-react';
 import FileCard from './FileCard';
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +35,7 @@ export default function FileGrid({
   folders = [], 
   activeFolder = 'Root', 
   setActiveFolder, 
+  setActiveFolderOwner,
   loading, 
   refreshFiles, 
   searchVal, 
@@ -118,7 +120,7 @@ export default function FileGrid({
 
   const handleDownload = (s3Key) => {
     const tokenParam = user?.token ? `&token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${s3Key}?download=true${tokenParam}`, '_blank');
+    window.open(`${apiBaseUrl}/api/files/download/${encodeURIComponent(s3Key)}?download=true${tokenParam}`, '_blank');
   };
 
   const handleView = (file) => {
@@ -126,12 +128,12 @@ export default function FileGrid({
       onViewFile(file);
     } else {
       const tokenParam = user?.token ? `&token=${user.token}` : '';
-      window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}?view=true${tokenParam}`, '_blank');
+      window.open(`${apiBaseUrl}/api/files/download/${encodeURIComponent(file.s3Key)}?view=true${tokenParam}`, '_blank');
     }
   };
 
   const handleCopyLink = (s3Key, fileId) => {
-    const link = `${apiBaseUrl}/api/files/download/${s3Key}`;
+    const link = `${apiBaseUrl}/api/files/download/${encodeURIComponent(s3Key)}`;
     navigator.clipboard.writeText(link).then(() => {
       setCopyingId(fileId);
       setTimeout(() => setCopyingId(null), 2000);
@@ -243,29 +245,58 @@ export default function FileGrid({
   return (
     <div className="space-y-6">
       {/* Folders Section */}
-      {currentTab === 'my-files' && !searchVal && activeFolder === 'Root' && folders.length > 0 && (
+      {(currentTab === 'my-files' || currentTab === 'shared') && !searchVal && activeFolder === 'Root' && folders.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Folders</h3>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {folders.map((folder) => {
               const isFolderSelected = selectedFolderIds.includes(folder._id);
+              const isShared = folder.sharedWith && folder.sharedWith.length > 0;
+              const isOwner = folder.owner?._id === user?._id || folder.owner === user?._id;
+
               return (
                 <div
                   key={folder._id}
-                  onClick={() => setActiveFolder(folder.name)}
+                  onClick={() => {
+                    setActiveFolder(folder.name);
+                    if (setActiveFolderOwner) {
+                      setActiveFolderOwner(folder.owner?._id || folder.owner || null);
+                    }
+                  }}
                   className={`group relative flex items-center gap-3 rounded-xl border p-3.5 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all duration-300 cursor-pointer ${
                     isFolderSelected 
                       ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-950/20' 
                       : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'
                   }`}
                 >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                  <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
                     <FolderOpen className="h-4.5 w-4.5" />
+                    {isShared && (
+                      <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 border border-white dark:border-zinc-950 text-[7px] text-white">
+                        <Users className="h-2 w-2" />
+                      </span>
+                    )}
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 flex items-center justify-between gap-1">
                     <p className="truncate text-xs font-bold text-zinc-800 dark:text-zinc-250" title={folder.name}>
                       {folder.name}
                     </p>
+
+                    {/* Share folder button visible on hover if owner */}
+                    {isOwner && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onShareClick) {
+                            onShareClick(folder);
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-zinc-550 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all border-0 bg-transparent shrink-0"
+                        title="Share Folder"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Folder Select Checkbox */}

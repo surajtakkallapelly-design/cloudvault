@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Copy, Check, Globe, Lock, Clock, Calendar, AlertCircle, Users, Shield } from 'lucide-react';
+import { X, Copy, Check, Globe, Lock, Clock, Calendar, AlertCircle, Users, Shield, MessageCircle, Send } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
@@ -23,9 +23,11 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
 
   if (!isOpen || !file) return null;
 
-  const shareUrl = `${apiBaseUrl}/api/files/download/${file.s3Key}`;
+  const isFolder = file.name !== undefined && file.fileName === undefined;
+  const shareUrl = isFolder ? '' : `${apiBaseUrl}/api/files/download/${encodeURIComponent(file.s3Key)}`;
 
   const handleCopy = () => {
+    if (isFolder) return;
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -39,7 +41,10 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
     setSharingLoading(true);
     setErrorMessage('');
     try {
-      const { data } = await api.post(`/api/files/share-user/${file._id}`, {
+      const endpoint = isFolder 
+        ? `/api/files/folders/share/${file._id}`
+        : `/api/files/share-user/${file._id}`;
+      const { data } = await api.post(endpoint, {
         email: shareEmail.trim().toLowerCase(),
         permission: sharePermission
       });
@@ -49,7 +54,7 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
         onShareToggle(file._id, data);
       }
     } catch (err) {
-      setErrorMessage(err.response?.data?.message || 'Failed to share file');
+      setErrorMessage(err.response?.data?.message || `Failed to share ${isFolder ? 'folder' : 'file'}`);
     } finally {
       setSharingLoading(false);
     }
@@ -59,7 +64,10 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
     setSharingLoading(true);
     setErrorMessage('');
     try {
-      const { data } = await api.delete(`/api/files/share-user/${file._id}/${userId}`);
+      const endpoint = isFolder
+        ? `/api/files/folders/share/${file._id}/${userId}`
+        : `/api/files/share-user/${file._id}/${userId}`;
+      const { data } = await api.delete(endpoint);
       setSharedWith(data.sharedWith || []);
       if (onShareToggle) {
         onShareToggle(file._id, data);
@@ -84,8 +92,8 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
               <Globe className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Share Document</h3>
-              <p className="text-xs text-zinc-500 mt-0.5">Control access, collaboration, and visibility</p>
+              <h3 className="text-base font-bold text-white">{isFolder ? 'Share Folder' : 'Share Document'}</h3>
+              <p className="text-xs text-zinc-500 mt-0.5">Control access and collaboration permissions</p>
             </div>
           </div>
           <button 
@@ -98,10 +106,10 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
 
         {/* Modal Body */}
         <div className="mt-6 space-y-6">
-          {/* File summary */}
+          {/* Summary card */}
           <div className="rounded-xl bg-zinc-900/40 border border-zinc-900 p-4">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Document Title</span>
-            <span className="text-sm font-semibold text-zinc-200 mt-1 block truncate">{file.fileName}</span>
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">{isFolder ? 'Folder Name' : 'Document Title'}</span>
+            <span className="text-sm font-semibold text-zinc-200 mt-1 block truncate">{isFolder ? file.name : file.fileName}</span>
           </div>
 
           {/* Share with People Form */}
@@ -145,7 +153,7 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
               <label className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider block">People with access</label>
               <div className="max-h-32 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                 {sharedWith.map((share) => (
-                  <div key={share.user?._id || share.user} className="flex items-center justify-between rounded-xl bg-zinc-900/20 border border-zinc-900/60 p-3">
+                  <div key={share.user?._id || share.user || share.email} className="flex items-center justify-between rounded-xl bg-zinc-900/20 border border-zinc-900/60 p-3">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-bold text-zinc-200">{share.email}</p>
                       <p className="text-[10px] text-zinc-500 capitalize mt-0.5 flex items-center gap-1">
@@ -155,7 +163,7 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleRemoveShare(share.user?._id || share.user)}
+                      onClick={() => handleRemoveShare(share.user?._id || share.user || share.email)}
                       className="text-[10px] font-bold text-rose-450 hover:text-rose-400 hover:underline cursor-pointer disabled:opacity-50 border-0 bg-transparent"
                       disabled={sharingLoading}
                     >
@@ -167,98 +175,136 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
             </div>
           )}
 
-          {/* Visibility control */}
-          <div className="flex items-center justify-between py-1 border-t border-zinc-900 pt-4">
-            <div>
-              <p className="text-sm font-semibold text-zinc-300">Link Sharing</p>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                {file.isShared 
-                  ? 'Anyone with the link can download this document' 
-                  : 'Only you and shared users can access this file'
-                }
-              </p>
-            </div>
-
-            <button
-              onClick={() => onShareToggle(file._id)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                file.isShared ? 'bg-indigo-600' : 'bg-zinc-800'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  file.isShared ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Link output */}
-          {file.isShared ? (
-            <div className="space-y-4 animate-in fade-in duration-350">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-500">Public Link</label>
-                <div className="relative flex rounded-xl bg-zinc-900 border border-zinc-850 p-1">
-                  <input
-                    type="text"
-                    readOnly
-                    value={shareUrl}
-                    className="block w-full border-0 bg-transparent px-3 py-2.5 text-xs text-zinc-300 focus:ring-0 focus:outline-none min-w-0 truncate"
-                  />
-                  <button
-                    onClick={handleCopy}
-                    className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer border-0 ${
-                      copied 
-                        ? 'bg-emerald-550/20 text-emerald-450 border border-emerald-500/20' 
-                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/10'
-                    }`}
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="h-3.5 w-3.5" /> Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-3.5 w-3.5" /> Copy
-                      </>
-                    )}
-                  </button>
+          {!isFolder && (
+            <>
+              {/* Visibility control */}
+              <div className="flex items-center justify-between py-1 border-t border-zinc-900 pt-4">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-300">Link Sharing</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    {file.isShared 
+                      ? 'Anyone with the link can download this document' 
+                      : 'Only you and shared users can access this file'
+                    }
+                  </p>
                 </div>
+
+                <button
+                  onClick={() => onShareToggle(file._id)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    file.isShared ? 'bg-indigo-600' : 'bg-zinc-800'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      file.isShared ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
-              {/* Expiry Details */}
-              {file.sharedLinkExpiresAt && (
-                <div className="flex items-start gap-2.5 rounded-xl bg-indigo-500/5 border border-indigo-500/10 p-3 text-xs text-indigo-400">
-                  <Clock className="h-4 w-4 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-indigo-400">Link Expiration Warning</p>
-                    <p className="mt-0.5 text-indigo-400/80 leading-relaxed">
-                      For security compliance, this public share link expires automatically on{' '}
-                      <span className="font-bold">
-                        {new Date(file.sharedLinkExpiresAt).toLocaleDateString(undefined, { 
-                          month: 'short', 
-                          day: 'numeric', 
-                          year: 'numeric' 
-                        })}
-                      </span>{' '}
-                      at{' '}
-                      <span className="font-bold">
-                        {new Date(file.sharedLinkExpiresAt).toLocaleTimeString([], { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </span>{' '}
-                      (24 hours from activation).
-                    </p>
+              {/* Link output */}
+              {file.isShared ? (
+                <div className="space-y-4 animate-in fade-in duration-350">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-500">Public Link</label>
+                    <div className="relative flex rounded-xl bg-zinc-900 border border-zinc-850 p-1">
+                      <input
+                        type="text"
+                        readOnly
+                        value={shareUrl}
+                        className="block w-full border-0 bg-transparent px-3 py-2.5 text-xs text-zinc-300 focus:ring-0 focus:outline-none min-w-0 truncate"
+                      />
+                      <button
+                        onClick={handleCopy}
+                        className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer border-0 ${
+                          copied 
+                            ? 'bg-emerald-550/20 text-emerald-450 border border-emerald-500/20' 
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/10'
+                        }`}
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="h-3.5 w-3.5" /> Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" /> Copy
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Social sharing buttons */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-3.5 border-t border-zinc-900/60">
+                    <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block">Send to:</span>
+                    <div className="flex items-center flex-wrap gap-3">
+                      <a
+                        href={`https://api.whatsapp.com/send?text=Check%20out%20this%20file%20on%20CloudVault:%20${encodeURIComponent(shareUrl)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 bg-emerald-600/10 text-emerald-450 hover:bg-emerald-600/20 text-xs font-bold border border-emerald-500/20 transition-all no-underline cursor-pointer"
+                      >
+                        <MessageCircle className="h-4 w-4" /> WhatsApp
+                      </a>
+                      <a
+                        href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 text-xs font-bold border border-blue-500/20 transition-all no-underline cursor-pointer"
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+                        </svg>
+                        <span>Facebook</span>
+                      </a>
+                      <a
+                        href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent('Check out this file on CloudVault:')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 bg-sky-600/10 text-sky-400 hover:bg-sky-600/20 text-xs font-bold border border-sky-500/20 transition-all no-underline cursor-pointer"
+                      >
+                        <Send className="h-3.5 w-3.5" /> Telegram
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Expiry Details */}
+                  {file.sharedLinkExpiresAt && (
+                    <div className="flex items-start gap-2.5 rounded-xl bg-indigo-500/5 border border-indigo-500/10 p-3 text-xs text-indigo-400">
+                      <Clock className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-indigo-400">Link Expiration Warning</p>
+                        <p className="mt-0.5 text-indigo-400/80 leading-relaxed">
+                          For security compliance, this public share link expires automatically on{' '}
+                          <span className="font-bold">
+                            {new Date(file.sharedLinkExpiresAt).toLocaleDateString(undefined, { 
+                              month: 'short', 
+                              day: 'numeric', 
+                              year: 'numeric' 
+                            })}
+                          </span>{' '}
+                          at{' '}
+                          <span className="font-bold">
+                            {new Date(file.sharedLinkExpiresAt).toLocaleTimeString([], { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </span>{' '}
+                          (24 hours from activation).
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2.5 rounded-xl bg-zinc-900/60 border border-zinc-900 p-4 text-xs text-zinc-500">
+                  <Lock className="h-4 w-4 shrink-0" />
+                  <span>Link sharing is currently disabled. Turn it on above to generate a shareable URL.</span>
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5 rounded-xl bg-zinc-900/60 border border-zinc-900 p-4 text-xs text-zinc-500">
-              <Lock className="h-4 w-4 shrink-0" />
-              <span>Link sharing is currently disabled. Turn it on above to generate a shareable URL.</span>
-            </div>
+            </>
           )}
         </div>
       </div>

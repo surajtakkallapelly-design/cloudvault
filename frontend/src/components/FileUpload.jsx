@@ -56,7 +56,8 @@ export default function FileUpload({ onUploadSuccess }) {
       const { data } = await api.get('/api/files/upload-url', {
         params: {
           fileName: file.name,
-          fileType: file.type || 'application/octet-stream'
+          fileType: file.type || 'application/octet-stream',
+          fileSize: file.size,
         }
       });
 

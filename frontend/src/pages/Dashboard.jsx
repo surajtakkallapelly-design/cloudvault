@@ -29,6 +29,18 @@ export default function Dashboard() {
   const [selectedFileIds, setSelectedFileIds] = useState([]);
   const [selectedFolderIds, setSelectedFolderIds] = useState([]);
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [activeFolderOwner, setActiveFolderOwner] = useState(null);
+  const [storageStats, setStorageStats] = useState({
+    totalSize: 0,
+    filesCount: 0,
+    categories: {
+      Images: { size: 0, count: 0 },
+      Videos: { size: 0, count: 0 },
+      Documents: { size: 0, count: 0 },
+      Archives: { size: 0, count: 0 },
+      Others: { size: 0, count: 0 }
+    }
+  });
 
   // Event listener to refresh files when parallel uploads succeed
   useEffect(() => {
@@ -132,6 +144,15 @@ export default function Dashboard() {
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
+  const fetchStorageStats = async () => {
+    try {
+      const { data } = await api.get('/api/files/storage-usage');
+      setStorageStats(data);
+    } catch (err) {
+      console.error('Error fetching storage stats:', err);
+    }
+  };
+
   const fetchFiles = async () => {
     try {
       setLoading(true);
@@ -145,11 +166,13 @@ export default function Dashboard() {
           starred: currentTab === 'starred' ? 'true' : 'false',
           trash: currentTab === 'trash' ? 'true' : 'false',
           folder: currentTab === 'my-files' ? activeFolder : '',
+          folderOwner: activeFolderOwner || '',
           search: searchVal
         };
         const { data } = await api.get('/api/files/my-files', { params });
         setFiles(data);
       }
+      fetchStorageStats();
     } catch (err) {
       console.error('Error fetching files:', err);
     } finally {
@@ -159,8 +182,13 @@ export default function Dashboard() {
 
   const fetchFolders = async () => {
     try {
-      const { data } = await api.get('/api/files/folders');
-      setFolders(data);
+      if (currentTab === 'shared') {
+        const { data } = await api.get('/api/files/folders/shared-with-me');
+        setFolders(data);
+      } else {
+        const { data } = await api.get('/api/files/folders');
+        setFolders(data);
+      }
     } catch (err) {
       console.error('Error fetching folders:', err);
     }
@@ -169,19 +197,22 @@ export default function Dashboard() {
   const fetchAllData = () => {
     fetchFiles();
     fetchFolders();
+    fetchStorageStats();
   };
 
   // Refetch files on navigation, sorting, filter or search changes
   useEffect(() => {
     fetchFiles();
+    fetchFolders();
     // Clear selection when tab or folder changes to prevent accidental bulk actions
     setSelectedFileIds([]);
     setSelectedFolderIds([]);
-  }, [currentTab, activeFolder, sortBy, fileTypeFilter, searchVal]);
+  }, [currentTab, activeFolder, activeFolderOwner, sortBy, fileTypeFilter, searchVal]);
 
-  // Initial fetch for folders (files are fetched by the above useEffect)
+  // Initial fetch for folders & stats
   useEffect(() => {
     fetchFolders();
+    fetchStorageStats();
   }, []);
 
   const handleCreateFolder = async () => {
@@ -318,8 +349,8 @@ export default function Dashboard() {
   };
 
   // Compute metrics
-  const filesCount = files.length;
-  const totalSize = files.reduce((acc, curr) => acc + curr.fileSize, 0);
+  const filesCount = storageStats.filesCount;
+  const totalSize = storageStats.totalSize;
 
   const formatBytes = (bytes, decimals = 2) => {
     if (bytes === 0) return '0 Bytes';
@@ -344,15 +375,18 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-zinc-200 dark:border-zinc-900/60 mb-6">
         <div>
           {/* Breadcrumbs Navigation */}
-          {currentTab === 'my-files' && (
+          {(currentTab === 'my-files' || currentTab === 'shared') && (
             <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-semibold mb-2">
               <button 
-                onClick={() => setActiveFolder('Root')}
+                onClick={() => {
+                  setActiveFolder('Root');
+                  setActiveFolderOwner(null);
+                }}
                 className={`hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer ${
                   activeFolder === 'Root' ? 'text-zinc-800 dark:text-zinc-200 font-bold' : ''
                 }`}
               >
-                Root Drive
+                {currentTab === 'shared' ? 'Shared with me' : 'Root Drive'}
               </button>
               {activeFolder !== 'Root' && (
                 <>
@@ -371,7 +405,7 @@ export default function Dashboard() {
               : currentTab === 'starred'
               ? 'Starred Files'
               : currentTab === 'shared'
-              ? 'Shared Links'
+              ? (activeFolder === 'Root' ? 'Shared with me' : activeFolder)
               : currentTab === 'trash'
               ? 'Trash Bin'
               : 'Account Settings'
@@ -629,36 +663,39 @@ export default function Dashboard() {
                   const storageLimit = 20 * 1024 * 1024 * 1024;
                   const storagePercent = Math.min((totalSize / storageLimit) * 100, 100).toFixed(1);
                   
-                  // Categorize files
+                  // Categorize files globally from storageStats
                   const categories = {
-                    Images: { size: 0, count: 0, color: '#6366f1', bgClass: 'bg-indigo-500 border-indigo-500/30' },
-                    Videos: { size: 0, count: 0, color: '#3b82f6', bgClass: 'bg-blue-500 border-blue-500/30' },
-                    Documents: { size: 0, count: 0, color: '#10b981', bgClass: 'bg-emerald-500 border-emerald-500/30' },
-                    Archives: { size: 0, count: 0, color: '#f97316', bgClass: 'bg-orange-500 border-orange-500/30' },
-                    Others: { size: 0, count: 0, color: '#64748b', bgClass: 'bg-slate-500 border-slate-500/30' }
-                  };
-
-                  files.forEach((file) => {
-                    const type = (file.fileType || '').toLowerCase();
-                    const ext = (file.fileName || '').split('.').pop().toLowerCase();
-
-                    if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
-                      categories.Images.size += file.fileSize;
-                      categories.Images.count += 1;
-                    } else if (type.startsWith('video/') || ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'].includes(ext)) {
-                      categories.Videos.size += file.fileSize;
-                      categories.Videos.count += 1;
-                    } else if (type.startsWith('audio/') || type.includes('pdf') || type.includes('word') || type.includes('excel') || ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md'].includes(ext)) {
-                      categories.Documents.size += file.fileSize;
-                      categories.Documents.count += 1;
-                    } else if (type.includes('zip') || type.includes('tar') || type.includes('rar') || ['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) {
-                      categories.Archives.size += file.fileSize;
-                      categories.Archives.count += 1;
-                    } else {
-                      categories.Others.size += file.fileSize;
-                      categories.Others.count += 1;
+                    Images: { 
+                      size: storageStats.categories?.Images?.size || 0, 
+                      count: storageStats.categories?.Images?.count || 0, 
+                      color: '#6366f1', 
+                      bgClass: 'bg-indigo-500 border-indigo-500/30' 
+                    },
+                    Videos: { 
+                      size: storageStats.categories?.Videos?.size || 0, 
+                      count: storageStats.categories?.Videos?.count || 0, 
+                      color: '#3b82f6', 
+                      bgClass: 'bg-blue-500 border-blue-500/30' 
+                    },
+                    Documents: { 
+                      size: storageStats.categories?.Documents?.size || 0, 
+                      count: storageStats.categories?.Documents?.count || 0, 
+                      color: '#10b981', 
+                      bgClass: 'bg-emerald-500 border-emerald-500/30' 
+                    },
+                    Archives: { 
+                      size: storageStats.categories?.Archives?.size || 0, 
+                      count: storageStats.categories?.Archives?.count || 0, 
+                      color: '#f97316', 
+                      bgClass: 'bg-orange-500 border-orange-500/30' 
+                    },
+                    Others: { 
+                      size: storageStats.categories?.Others?.size || 0, 
+                      count: storageStats.categories?.Others?.count || 0, 
+                      color: '#64748b', 
+                      bgClass: 'bg-slate-500 border-slate-500/30' 
                     }
-                  });
+                  };
 
                   const categoriesArray = Object.entries(categories).map(([name, data]) => ({
                     name,
@@ -1035,6 +1072,7 @@ export default function Dashboard() {
               folders={folders}
               activeFolder={activeFolder}
               setActiveFolder={setActiveFolder}
+              setActiveFolderOwner={setActiveFolderOwner}
               loading={loading} 
               refreshFiles={fetchAllData}
               searchVal={searchVal}

@@ -25,6 +25,10 @@ import {
   bulkDeleteFiles,
   bulkMoveFiles,
   bulkDownloadFiles,
+  shareFolderWithUser,
+  removeFolderShare,
+  getSharedFoldersWithMe,
+  getStorageUsage,
 } from '../controllers/fileController.js';
 
 const router = express.Router();
@@ -40,6 +44,7 @@ router.get('/folders', protect, getFolders);
 router.put('/move/:fileId', protect, moveFileToFolder);
 router.put('/star/:fileId', protect, toggleStarFile);
 router.put('/trash/:fileId', protect, toggleTrashFile);
+router.get('/storage-usage', protect, getStorageUsage);
 
 // Bulk operations
 router.get('/bulk-download', protect, bulkDownloadFiles);
@@ -52,6 +57,11 @@ router.post('/bulk-move', protect, bulkMoveFiles);
 router.get('/shared-with-me', protect, getSharedWithMe);
 router.post('/share-user/:fileId', protect, shareFileWithUser);
 router.delete('/share-user/:fileId/:userId', protect, removeFileShare);
+
+// Folder Collaborative Sharing
+router.get('/folders/shared-with-me', protect, getSharedFoldersWithMe);
+router.post('/folders/share/:folderId', protect, shareFolderWithUser);
+router.delete('/folders/share/:folderId/:userId', protect, removeFolderShare);
 
 // File Versions
 router.get('/:fileId/versions', protect, getFileVersions);

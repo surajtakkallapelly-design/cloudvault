@@ -35,6 +35,17 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
   const [mediaLoading, setMediaLoading] = useState(true);
   const [versions, setVersions] = useState([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showMobileVersions, setShowMobileVersions] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Handle open/close state of native HTMLDialog
   useEffect(() => {
@@ -49,6 +60,7 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
       setIframeLoading(true);
       setMediaLoading(true);
       setVersions([]);
+      setShowMobileVersions(false);
       dialog.showModal();
       fetchFileUrl();
     } else {
@@ -92,7 +104,7 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
     setLoading(true);
     try {
       const tokenParam = user?.token ? `&token=${user.token}` : '';
-      const response = await api.get(`/api/files/download/${file.s3Key}?json=true${tokenParam}`);
+      const response = await api.get(`/api/files/download/${encodeURIComponent(file.s3Key)}?json=true${tokenParam}`);
       const url = response.data.downloadUrl;
       setDownloadUrl(url);
 
@@ -170,12 +182,12 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
   const handleDownloadDirect = () => {
     if (!file) return;
     const tokenParam = user?.token ? `&token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}?download=true${tokenParam}`, '_blank');
+    window.open(`${apiBaseUrl}/api/files/download/${encodeURIComponent(file.s3Key)}?download=true${tokenParam}`, '_blank');
   };
 
   const handleDownloadVersion = (verS3Key) => {
     const tokenParam = user?.token ? `&token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${verS3Key}?download=true${tokenParam}`, '_blank');
+    window.open(`${apiBaseUrl}/api/files/download/${encodeURIComponent(verS3Key)}?download=true${tokenParam}`, '_blank');
   };
 
   const handleRestoreVersion = async (versionNumber) => {
@@ -211,7 +223,7 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
   };
 
   const handleCopyLink = () => {
-    const link = `${apiBaseUrl}/api/files/download/${file.s3Key}`;
+    const link = `${apiBaseUrl}/api/files/download/${encodeURIComponent(file.s3Key)}`;
     navigator.clipboard.writeText(link).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -296,6 +308,18 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
                 <Download className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Download</span>
               </button>
+
+              {/* History Button (Mobile Only) */}
+              {!file.isTrashed && (
+                <button
+                  onClick={() => setShowMobileVersions(!showMobileVersions)}
+                  className="md:hidden flex items-center gap-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 px-3 py-1.5 text-xs font-bold text-zinc-650 dark:text-zinc-400 cursor-pointer transition-colors border-0 bg-transparent"
+                  title="Toggle Version History"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  <span className="hidden xs:inline">Versions</span>
+                </button>
+              )}
 
               {/* Close Dialog Button */}
               <button
@@ -396,22 +420,46 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
 
                   {/* PDF Preview */}
                   {fileType === 'pdf' && (
-                    <div className="relative w-full h-full min-h-[60vh]">
-                      {iframeLoading && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-950 z-10">
-                          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                          <p className="text-xs text-zinc-550 dark:text-zinc-400 font-bold uppercase tracking-widest">
-                            Loading PDF document... Please wait.
-                          </p>
+                    isMobile ? (
+                      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-900/10 p-6 md:p-8 text-center shadow-md">
+                        <FileText className="mx-auto h-14 w-14 text-indigo-500 dark:text-indigo-400 mb-5 animate-pulse" />
+                        <h4 className="text-sm font-bold text-zinc-900 dark:text-white truncate mb-2">PDF Document</h4>
+                        <p className="text-xs text-zinc-550 dark:text-zinc-500 mb-6 font-medium leading-relaxed">PDF previews are optimized for native browser viewing. Please open the document in a new tab or download it directly to view it.</p>
+                        <div className="flex flex-col gap-3">
+                          <a
+                            href={downloadUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-655 hover:bg-indigo-600 text-white font-bold text-xs uppercase tracking-wider py-3 shadow-md transition-colors cursor-pointer text-center"
+                          >
+                            <Eye className="h-4 w-4" /> Open in New Tab
+                          </a>
+                          <button
+                            onClick={handleDownloadDirect}
+                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-zinc-100 hover:bg-zinc-250 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-850 dark:text-zinc-250 font-bold text-xs uppercase tracking-wider py-3 shadow-md transition-colors cursor-pointer border-0"
+                          >
+                            <Download className="h-4 w-4" /> Download PDF
+                          </button>
                         </div>
-                      )}
-                      <iframe
-                        src={downloadUrl}
-                        title={file.fileName}
-                        onLoad={() => setIframeLoading(false)}
-                        className="w-full h-full min-h-[60vh] rounded-xl border border-zinc-200 dark:border-zinc-900 bg-white"
-                      />
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="relative w-full h-full min-h-[60vh]">
+                        {iframeLoading && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-950 z-10">
+                            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                            <p className="text-xs text-zinc-555 dark:text-zinc-400 font-bold uppercase tracking-widest">
+                              Loading PDF document... Please wait.
+                            </p>
+                          </div>
+                        )}
+                        <iframe
+                          src={downloadUrl}
+                          title={file.fileName}
+                          onLoad={() => setIframeLoading(false)}
+                          className="w-full h-full min-h-[60vh] rounded-xl border border-zinc-200 dark:border-zinc-900 bg-white"
+                        />
+                      </div>
+                    )
                   )}
 
                   {/* Text/Code Preview */}
@@ -425,51 +473,78 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
 
                   {/* Office Document Preview */}
                   {fileType === 'office' && (
-                    !downloadUrl.includes('localhost') && !downloadUrl.includes('127.0.0.1') ? (
-                      <div className="w-full h-full flex flex-col gap-2">
-                        <div className="flex justify-end px-2">
-                          <button
-                            onClick={() => {
-                              setOfficeViewer(officeViewer === 'microsoft' ? 'google' : 'microsoft');
-                              setIframeLoading(true);
-                            }}
-                            className="text-[10px] font-bold uppercase tracking-wider text-indigo-650 dark:text-indigo-400 hover:text-indigo-855 dark:hover:text-indigo-300 transition-colors cursor-pointer border-0 bg-transparent"
-                          >
-                            Switch to {officeViewer === 'microsoft' ? 'Google Docs Viewer' : 'Microsoft Office Viewer'}
-                          </button>
-                        </div>
-                        <div className="relative w-full h-full min-h-[60vh]">
-                          {iframeLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-950 z-10">
-                              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                              <p className="text-xs text-zinc-555 dark:text-zinc-400 font-bold uppercase tracking-widest">
-                                Loading document preview... Please wait.
-                              </p>
-                            </div>
-                          )}
-                          <iframe
-                            src={officeViewer === 'microsoft'
+                    isMobile ? (
+                      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-900/10 p-6 md:p-8 text-center shadow-md">
+                        <FileText className="mx-auto h-14 w-14 text-indigo-500 dark:text-indigo-400 mb-5 animate-pulse" />
+                        <h4 className="text-sm font-bold text-zinc-900 dark:text-white truncate mb-2">Office Document</h4>
+                        <p className="text-xs text-zinc-550 dark:text-zinc-500 mb-6 font-medium leading-relaxed">Office document previews are optimized for native browser viewing. Please open the document in a new tab or download it directly to view it.</p>
+                        <div className="flex flex-col gap-3">
+                          <a
+                            href={officeViewer === 'microsoft'
                               ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(downloadUrl)}`
                               : `https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`
                             }
-                            title={file.fileName}
-                            onLoad={() => setIframeLoading(false)}
-                            className="w-full h-full min-h-[60vh] rounded-xl border border-zinc-200 dark:border-zinc-900 bg-white"
-                          />
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-655 hover:bg-indigo-600 text-white font-bold text-xs uppercase tracking-wider py-3 shadow-md transition-colors cursor-pointer text-center"
+                          >
+                            <Eye className="h-4 w-4" /> Open in New Tab
+                          </a>
+                          <button
+                            onClick={handleDownloadDirect}
+                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-zinc-100 hover:bg-zinc-250 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-850 dark:text-zinc-250 font-bold text-xs uppercase tracking-wider py-3 shadow-md transition-colors cursor-pointer border-0"
+                          >
+                            <Download className="h-4 w-4" /> Download Document
+                          </button>
                         </div>
                       </div>
                     ) : (
-                      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-900/10 p-6 md:p-8 text-center shadow-md">
-                        <FileText className="mx-auto h-14 w-14 text-zinc-400 mb-5" />
-                        <h4 className="text-sm font-bold text-zinc-900 dark:text-white truncate mb-2">Office Document Preview</h4>
-                        <p className="text-xs text-zinc-555 dark:text-zinc-500 mb-6 font-medium">Document previews are optimized for cloud storage deployments. Please download the file to view it locally.</p>
-                        <button
-                          onClick={handleDownloadDirect}
-                          className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider py-3 shadow-md transition-colors cursor-pointer border-0"
-                        >
-                          <Download className="h-4 w-4" /> Download Document
-                        </button>
-                      </div>
+                      !downloadUrl.includes('localhost') && !downloadUrl.includes('127.0.0.1') ? (
+                        <div className="w-full h-full flex flex-col gap-2">
+                          <div className="flex justify-end px-2">
+                            <button
+                              onClick={() => {
+                                setOfficeViewer(officeViewer === 'microsoft' ? 'google' : 'microsoft');
+                                setIframeLoading(true);
+                              }}
+                              className="text-[10px] font-bold uppercase tracking-wider text-indigo-650 dark:text-indigo-400 hover:text-indigo-855 dark:hover:text-indigo-300 transition-colors cursor-pointer border-0 bg-transparent"
+                            >
+                              Switch to {officeViewer === 'microsoft' ? 'Google Docs Viewer' : 'Microsoft Office Viewer'}
+                            </button>
+                          </div>
+                          <div className="relative w-full h-full min-h-[60vh]">
+                            {iframeLoading && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-950 z-10">
+                                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                                <p className="text-xs text-zinc-555 dark:text-zinc-400 font-bold uppercase tracking-widest">
+                                  Loading document preview... Please wait.
+                                </p>
+                              </div>
+                            )}
+                            <iframe
+                              src={officeViewer === 'microsoft'
+                                ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(downloadUrl)}`
+                                : `https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`
+                              }
+                              title={file.fileName}
+                              onLoad={() => setIframeLoading(false)}
+                              className="w-full h-full min-h-[60vh] rounded-xl border border-zinc-200 dark:border-zinc-900 bg-white"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-900/10 p-6 md:p-8 text-center shadow-md">
+                          <FileText className="mx-auto h-14 w-14 text-zinc-400 mb-5" />
+                          <h4 className="text-sm font-bold text-zinc-900 dark:text-white truncate mb-2">Office Document Preview</h4>
+                          <p className="text-xs text-zinc-555 dark:text-zinc-500 mb-6 font-medium">Document previews are optimized for cloud storage deployments. Please download the file to view it locally.</p>
+                          <button
+                            onClick={handleDownloadDirect}
+                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-650 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider py-3 shadow-md transition-colors cursor-pointer border-0"
+                          >
+                            <Download className="h-4 w-4" /> Download Document
+                          </button>
+                        </div>
+                      )
                     )
                   )}
 
@@ -524,7 +599,7 @@ export default function FilePreviewModal({ isOpen, onClose, file, refreshFiles }
 
             {/* Right Versions Pane (Google Drive Style) */}
             {!file.isTrashed && (
-              <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-950 p-6 flex flex-col h-full overflow-y-auto">
+              <div className={`${showMobileVersions ? 'flex' : 'hidden'} md:flex w-full md:w-80 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-950 p-6 flex-col h-fit md:h-full overflow-y-auto`}>
                 <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-350 border-b border-zinc-200 dark:border-zinc-900 pb-3 mb-4">
                   <History className="h-4 w-4 text-indigo-550 dark:text-indigo-400" />
                   <span className="text-xs font-black uppercase tracking-wider">Version History</span>
