@@ -28,6 +28,8 @@ export default function FilePreviewModal({ isOpen, onClose, file }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [officeViewer, setOfficeViewer] = useState('microsoft');
+  const [iframeLoading, setIframeLoading] = useState(true);
+  const [mediaLoading, setMediaLoading] = useState(true);
 
   // Handle open/close state of native HTMLDialog
   useEffect(() => {
@@ -39,6 +41,8 @@ export default function FilePreviewModal({ isOpen, onClose, file }) {
       setTextContent('');
       setDownloadUrl('');
       setOfficeViewer('microsoft');
+      setIframeLoading(true);
+      setMediaLoading(true);
       dialog.showModal();
       fetchFileUrl();
     } else {
@@ -291,12 +295,22 @@ export default function FilePreviewModal({ isOpen, onClose, file }) {
               <div className="w-full h-full flex items-center justify-center">
                 {/* Image Preview */}
                 {fileType === 'image' && (
-                  <div className="relative max-w-full max-h-[68vh] rounded-xl overflow-hidden shadow-lg border border-zinc-100 dark:border-zinc-900 bg-zinc-50 dark:bg-zinc-900 flex flex-col items-center justify-center">
+                  <div className="relative max-w-full max-h-[68vh] rounded-xl overflow-hidden shadow-lg border border-zinc-100 dark:border-zinc-900 bg-zinc-50 dark:bg-zinc-900 flex flex-col items-center justify-center min-w-[240px] min-h-[180px]">
+                    {mediaLoading && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-550/5 dark:bg-zinc-950/80 z-10">
+                        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                        <p className="text-xs text-zinc-550 dark:text-zinc-400 font-semibold uppercase tracking-widest">
+                          Loading image... Please wait.
+                        </p>
+                      </div>
+                    )}
                     <img
                       src={downloadUrl}
                       alt={file.fileName}
+                      onLoad={() => setMediaLoading(false)}
                       className="object-contain max-w-full max-h-[68vh] transition-transform duration-300"
                       onError={(e) => {
+                        setMediaLoading(false);
                         if (['heic', 'heif'].includes(file.fileName.split('.').pop().toLowerCase())) {
                           e.target.style.display = 'none';
                           const msgEl = document.getElementById('heic-warning');
@@ -313,12 +327,23 @@ export default function FilePreviewModal({ isOpen, onClose, file }) {
 
                 {/* Video Preview */}
                 {fileType === 'video' && (
-                  <video
-                    src={downloadUrl}
-                    controls
-                    autoPlay
-                    className="w-full max-h-[68vh] rounded-xl bg-black shadow-lg focus:outline-none"
-                  />
+                  <div className="relative w-full max-h-[68vh] rounded-xl overflow-hidden shadow-lg bg-black flex flex-col items-center justify-center min-h-[250px]">
+                    {mediaLoading && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 z-10 text-zinc-400">
+                        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                        <p className="text-xs text-zinc-400 font-semibold uppercase tracking-widest">
+                          Buffering video... Please wait.
+                        </p>
+                      </div>
+                    )}
+                    <video
+                      src={downloadUrl}
+                      controls
+                      autoPlay
+                      onLoadedData={() => setMediaLoading(false)}
+                      className="w-full max-h-[68vh] focus:outline-none"
+                    />
+                  </div>
                 )}
 
                 {/* Audio Preview */}
@@ -344,11 +369,22 @@ export default function FilePreviewModal({ isOpen, onClose, file }) {
 
                 {/* PDF Preview */}
                 {fileType === 'pdf' && (
-                  <iframe
-                    src={downloadUrl}
-                    title={file.fileName}
-                    className="w-full h-[68vh] rounded-xl border border-zinc-200 dark:border-zinc-900 bg-white"
-                  />
+                  <div className="relative w-full h-[68vh]">
+                    {iframeLoading && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-950 z-10">
+                        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                        <p className="text-xs text-zinc-550 dark:text-zinc-400 font-bold uppercase tracking-widest">
+                          Loading PDF document... Please wait.
+                        </p>
+                      </div>
+                    )}
+                    <iframe
+                      src={downloadUrl}
+                      title={file.fileName}
+                      onLoad={() => setIframeLoading(false)}
+                      className="w-full h-full rounded-xl border border-zinc-200 dark:border-zinc-900 bg-white"
+                    />
+                  </div>
                 )}
 
                 {/* Text/Code Preview */}
@@ -366,20 +402,34 @@ export default function FilePreviewModal({ isOpen, onClose, file }) {
                     <div className="w-full h-full flex flex-col gap-2">
                       <div className="flex justify-end px-2">
                         <button
-                          onClick={() => setOfficeViewer(officeViewer === 'microsoft' ? 'google' : 'microsoft')}
+                          onClick={() => {
+                            setOfficeViewer(officeViewer === 'microsoft' ? 'google' : 'microsoft');
+                            setIframeLoading(true);
+                          }}
                           className="text-[10px] font-bold uppercase tracking-wider text-indigo-650 dark:text-indigo-400 hover:text-indigo-850 dark:hover:text-indigo-300 transition-colors cursor-pointer"
                         >
                           Switch to {officeViewer === 'microsoft' ? 'Google Docs Viewer' : 'Microsoft Office Viewer'}
                         </button>
                       </div>
-                      <iframe
-                        src={officeViewer === 'microsoft'
-                          ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(downloadUrl)}`
-                          : `https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`
-                        }
-                        title={file.fileName}
-                        className="w-full h-[62vh] rounded-xl border border-zinc-200 dark:border-zinc-900 bg-white"
-                      />
+                      <div className="relative w-full h-[62vh]">
+                        {iframeLoading && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-950 z-10">
+                            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                            <p className="text-xs text-zinc-550 dark:text-zinc-400 font-bold uppercase tracking-widest">
+                              Loading document preview... Please wait.
+                            </p>
+                          </div>
+                        )}
+                        <iframe
+                          src={officeViewer === 'microsoft'
+                            ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(downloadUrl)}`
+                            : `https://docs.google.com/gview?url=${encodeURIComponent(downloadUrl)}&embedded=true`
+                          }
+                          title={file.fileName}
+                          onLoad={() => setIframeLoading(false)}
+                          className="w-full h-full rounded-xl border border-zinc-200 dark:border-zinc-900 bg-white"
+                        />
+                      </div>
                     </div>
                   ) : (
                     <div className="w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-900/10 p-6 md:p-8 text-center shadow-md">
