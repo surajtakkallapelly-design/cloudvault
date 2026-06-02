@@ -29,6 +29,7 @@ import {
   removeFolderShare,
   getSharedFoldersWithMe,
   getStorageUsage,
+  getSharedPreviewInfo,
 } from '../controllers/fileController.js';
 
 const router = express.Router();
@@ -72,6 +73,9 @@ router.delete('/:fileId', protect, deleteFile);
 
 // Public route for downloading files (handles checking ownership/share token internally)
 router.get('/download/:s3Key', getDownloadUrl);
+
+// Public route for shared preview file info
+router.get('/shared-preview/:fileId', getSharedPreviewInfo);
 
 // Public route mimicking the raw S3 PUT request for mock uploads
 router.put('/mock-upload/:s3Key', handleMockUpload);

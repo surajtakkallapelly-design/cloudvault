@@ -777,7 +777,7 @@ export const shareFileWithUser = async (req, res) => {
         process.env.JWT_SECRET || 'your_jwt_secret_key_here',
         { expiresIn: '7d' }
       );
-      const directAccessUrl = `${protocol}://${host}/api/files/download/${encodeURIComponent(file.s3Key)}?emailToken=${emailToken}`;
+      const directAccessUrl = `${protocol}://${host}/shared-preview/${file._id}?emailToken=${emailToken}`;
 
       const subject = `[CloudVault] File shared with you: ${file.fileName}`;
       const text = isRegistered
@@ -1443,5 +1443,139 @@ export const getStorageUsage = async (req, res) => {
   } catch (error) {
     console.error('Error fetching storage usage:', error);
     res.status(500).json({ message: 'Failed to fetch storage usage', error: error.message });
+  }
+};
+
+export const getSharedPreviewInfo = async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    
+    // We populate the owner to return their name/email to show who shared it
+    const file = await File.findById(fileId).populate('owner', 'name email');
+    if (!file) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    let hasAccess = false;
+    let requesterId = null;
+
+    // Extract JWT token from authorization header or query string
+    let token = null;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.query.token) {
+      token = req.query.token;
+    }
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
+        requesterId = decoded.id;
+      } catch (err) {
+        // Token verification failed, continue as anonymous check
+      }
+    }
+
+    // Check owner access
+    if (requesterId && file.owner && requesterId === file.owner._id.toString()) {
+      hasAccess = true;
+    }
+    
+    // Check collaborative registered user access
+    if (!hasAccess && requesterId && file.sharedWith && file.sharedWith.some(share => share.user && share.user.toString() === requesterId)) {
+      hasAccess = true;
+    }
+
+    // Check parent folder share access
+    if (!hasAccess && requesterId && file.folder && file.folder !== 'Root') {
+      const parentFolder = await Folder.findOne({
+        name: file.folder,
+        owner: file.owner,
+        'sharedWith.user': requesterId,
+        isTrashed: false
+      });
+      if (parentFolder) {
+        hasAccess = true;
+      }
+    }
+
+    // Check public sharing access
+    if (!hasAccess && file.isShared) {
+      if (!file.sharedLinkExpiresAt || new Date() < new Date(file.sharedLinkExpiresAt)) {
+        hasAccess = true;
+      }
+    }
+
+    // Check unregistered email sharing token access
+    if (!hasAccess && req.query.emailToken) {
+      try {
+        const decoded = jwt.verify(req.query.emailToken, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
+        if (decoded.fileId === file._id.toString() && file.sharedWith.some(share => share.email.toLowerCase() === decoded.email.toLowerCase())) {
+          hasAccess = true;
+        }
+      } catch (err) {
+        // Email token verification failed or expired
+      }
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied: File is private or link has expired' });
+    }
+
+    // Generate direct download URLs
+    const host = req.get('host');
+    let protocol = req.protocol;
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      protocol = 'https';
+    }
+
+    const emailTokenParam = req.query.emailToken ? `&emailToken=${req.query.emailToken}` : '';
+    const tokenParam = token ? `&token=${token}` : '';
+    const downloadUrl = `${protocol}://${host}/api/files/download/${encodeURIComponent(file.s3Key)}?download=true${emailTokenParam}${tokenParam}`;
+    const inlineUrl = `${protocol}://${host}/api/files/download/${encodeURIComponent(file.s3Key)}?download=false${emailTokenParam}${tokenParam}`;
+
+    // If text/code file, fetch preview content
+    let textContent = undefined;
+    if (isTextOrCode(file.fileName, file.fileType)) {
+      try {
+        if (isAWSConfigured()) {
+          const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+          const getCommand = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: file.s3Key,
+          });
+          const s3Response = await getS3Client().send(getCommand);
+          textContent = await s3Response.Body.transformToString();
+        } else {
+          const filePath = path.join(process.cwd(), 'uploads', file.s3Key);
+          if (fs.existsSync(filePath)) {
+            textContent = fs.readFileSync(filePath, 'utf-8');
+          }
+        }
+      } catch (readErr) {
+        console.error('Error reading file content:', readErr);
+        textContent = 'Failed to load text preview.';
+      }
+    }
+
+    res.json({
+      file: {
+        _id: file._id,
+        fileName: file.fileName,
+        fileSize: file.fileSize,
+        fileType: file.fileType,
+        owner: {
+          name: file.owner.name,
+          email: file.owner.email,
+        },
+        createdAt: file.createdAt,
+      },
+      downloadUrl,
+      inlineUrl,
+      textContent,
+    });
+  } catch (err) {
+    console.error('Error in getSharedPreviewInfo:', err);
+    res.status(500).json({ message: 'Failed to retrieve preview information', error: err.message });
   }
 };
