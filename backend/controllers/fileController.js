@@ -250,31 +250,11 @@ export const getDownloadUrl = async (req, res) => {
     }
 
     // Deliver file URL or direct file download stream
-    let finalUrl = '';
     const isDownload = req.query.download === 'true';
-
-    if (isAWSConfigured()) {
-      // Generate a signed URL for reading the object
-      const { GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const s3Params = {
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: s3Key,
-      };
-
-      if (isDownload) {
-        s3Params.ResponseContentDisposition = `attachment; filename="${file.fileName}"`;
-      } else {
-        s3Params.ResponseContentDisposition = 'inline';
-      }
-
-      const command = new GetObjectCommand(s3Params);
-      finalUrl = await getSignedUrl(getS3Client(), command, { expiresIn: 3600 });
-    } else {
-      // Deliver the local mock file download stream or URL
-      const host = req.get('host');
-      const protocol = req.protocol;
-      finalUrl = `${protocol}://${host}/uploads/${s3Key}`;
-    }
+    const host = req.get('host');
+    const protocol = req.protocol;
+    const tokenParam = token ? `?token=${token}` : '';
+    const finalUrl = `${protocol}://${host}/api/files/download/${s3Key}${tokenParam}`;
 
     if (req.query.json === 'true') {
       let textContent = undefined;
@@ -301,7 +281,57 @@ export const getDownloadUrl = async (req, res) => {
       }
       res.json({ downloadUrl: finalUrl, isLocal: !isAWSConfigured(), textContent });
     } else {
-      res.redirect(finalUrl);
+      // Set appropriate disposition and type headers
+      const escapedFilename = file.fileName.replace(/"/g, '\\"');
+      const encodedFilename = encodeURIComponent(file.fileName);
+      
+      res.setHeader('Content-Type', file.fileType || 'application/octet-stream');
+      if (file.fileSize) {
+        res.setHeader('Content-Length', file.fileSize);
+      }
+      
+      if (isDownload) {
+        res.setHeader('Content-Disposition', `attachment; filename="${escapedFilename}"; filename*=UTF-8''${encodedFilename}`);
+      } else {
+        res.setHeader('Content-Disposition', `inline; filename="${escapedFilename}"; filename*=UTF-8''${encodedFilename}`);
+      }
+
+      if (isAWSConfigured()) {
+        try {
+          const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+          const s3Params = {
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: s3Key,
+          };
+          const command = new GetObjectCommand(s3Params);
+          const s3Response = await getS3Client().send(command);
+
+          s3Response.Body.on('error', (streamErr) => {
+            console.error('S3 download stream error:', streamErr);
+            if (!res.headersSent) {
+              res.status(500).send('Error streaming file from S3');
+            }
+          });
+          s3Response.Body.pipe(res);
+        } catch (s3Error) {
+          console.error('S3 fetch error during stream download:', s3Error);
+          res.status(500).json({ message: 'Failed to stream file from S3 bucket', error: s3Error.message });
+        }
+      } else {
+        const filePath = path.join(process.cwd(), 'uploads', s3Key);
+        if (!fs.existsSync(filePath)) {
+          return res.status(404).json({ message: 'File physical storage not found' });
+        }
+
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.on('error', (streamErr) => {
+          console.error('Local download stream error:', streamErr);
+          if (!res.headersSent) {
+            res.status(500).send('Error streaming local file');
+          }
+        });
+        fileStream.pipe(res);
+      }
     }
   } catch (error) {
     console.error('Error generating download URL:', error);
