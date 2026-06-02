@@ -45,8 +45,13 @@ export const sendEmail = async (options) => {
     }
   }
 
+  const fromAddress = process.env.SMTP_FROM || 
+    (process.env.SMTP_USER && process.env.SMTP_USER.includes('@') 
+      ? `"CloudVault" <${process.env.SMTP_USER}>` 
+      : '"CloudVault" <onboarding@resend.dev>');
+
   const mailOptions = {
-    from: process.env.SMTP_USER ? `"CloudVault" <${process.env.SMTP_USER}>` : '"CloudVault" <noreply@cloudvault.com>',
+    from: fromAddress,
     to: options.to,
     subject: options.subject,
     text: options.text,
