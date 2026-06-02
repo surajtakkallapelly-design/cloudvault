@@ -68,7 +68,10 @@ export const getUploadUrl = async (req, res) => {
     } else {
       // Mock mode upload URL pointing to local server endpoint
       const host = req.get('host');
-      const protocol = req.protocol;
+      let protocol = req.protocol;
+      if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+        protocol = 'https';
+      }
       const uploadUrl = `${protocol}://${host}/api/files/mock-upload/${s3Key}`;
 
       console.warn('AWS Credentials not fully configured. Using mock local upload route.');
@@ -252,7 +255,10 @@ export const getDownloadUrl = async (req, res) => {
     // Deliver file URL or direct file download stream
     const isDownload = req.query.download === 'true';
     const host = req.get('host');
-    const protocol = req.protocol;
+    let protocol = req.protocol;
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      protocol = 'https';
+    }
     const tokenParam = token ? `?token=${token}` : '';
     const finalUrl = `${protocol}://${host}/api/files/download/${s3Key}${tokenParam}`;
 
