@@ -85,7 +85,7 @@ export default function AuthPage() {
       result = await requestOtp(email);
       setLoading(false);
       if (result.success) {
-        setSuccessMessage('OTP sent successfully. Please check your email.');
+        setSuccessMessage('OTP sent successfully. Please check your email (check your spam folder if not found in your inbox).');
         setMode('forgot-otp');
       } else {
         setError(result.error);
@@ -130,7 +130,7 @@ export default function AuthPage() {
       case 'forgot-email':
         return 'We will send a One-Time Password to your email';
       case 'forgot-otp':
-        return `Please check your inbox for the code sent to ${email}`;
+        return `Please check your inbox (and spam/junk folder) for the code sent to ${email}`;
       case 'login':
       default:
         return 'Access your cloud vault securely';

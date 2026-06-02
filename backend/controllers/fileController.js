@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
@@ -6,6 +6,8 @@ import path from 'path';
 import jwt from 'jsonwebtoken';
 import File from '../models/File.js';
 import Folder from '../models/Folder.js';
+import User from '../models/User.js';
+import { ZipArchive } from 'archiver';
 
 // Determine if we should run in mock S3 mode (to help developers test locally without AWS credentials)
 const isAWSConfigured = () => {
@@ -131,16 +133,38 @@ export const saveFileMetadata = async (req, res) => {
   }
 
   try {
-    const file = await File.create({
-      fileName,
-      s3Key,
-      fileSize,
-      fileType,
-      owner: req.user._id,
-      folder: folder || 'Root',
-    });
+    const targetFolder = folder || 'Root';
+    // Check if file with same name already exists in same folder for this user and isn't trashed
+    let file = await File.findOne({ fileName, folder: targetFolder, owner: req.user._id, isTrashed: false });
 
-    res.status(201).json(file);
+    if (file) {
+      // Versioning logic: backup current version
+      const newVersionNum = (file.versions?.length || 0) + 1;
+      file.versions.push({
+        versionNumber: newVersionNum,
+        s3Key: file.s3Key,
+        fileSize: file.fileSize,
+        uploadedAt: file.updatedAt || new Date()
+      });
+
+      // Update main to the new upload details
+      file.s3Key = s3Key;
+      file.fileSize = fileSize;
+      file.fileType = fileType;
+      await file.save();
+      res.status(200).json(file);
+    } else {
+      // Create new file document
+      file = await File.create({
+        fileName,
+        s3Key,
+        fileSize,
+        fileType,
+        owner: req.user._id,
+        folder: targetFolder,
+      });
+      res.status(201).json(file);
+    }
   } catch (error) {
     console.error('Error saving file metadata:', error);
     res.status(500).json({ message: 'Failed to save file metadata', error: error.message });
@@ -151,8 +175,82 @@ export const saveFileMetadata = async (req, res) => {
 // @route   GET /api/files/my-files
 // @access  Private
 export const getMyFiles = async (req, res) => {
+  const { type, starred, trash, sortBy, search, folder } = req.query;
+
   try {
-    const files = await File.find({ owner: req.user._id }).sort({ createdAt: -1 });
+    const query = { owner: req.user._id };
+
+    // Folder scoping
+    if (folder) {
+      query.folder = folder;
+    } else if (trash !== 'true' && starred !== 'true' && !search) {
+      // Scoping to root by default if navigating folders and no special view is active
+      query.folder = 'Root';
+    }
+
+    // Starred filter
+    if (starred === 'true') {
+      query.isStarred = true;
+    }
+
+    // Trash filter
+    if (trash === 'true') {
+      query.isTrashed = true;
+    } else {
+      query.isTrashed = false;
+    }
+
+    // Type filter
+    if (type && type !== 'all') {
+      const typeLower = type.toLowerCase();
+      if (typeLower === 'pdf') {
+        query.fileType = 'application/pdf';
+      } else if (typeLower === 'image') {
+        query.fileType = { $regex: /^image\//i };
+      } else if (typeLower === 'video') {
+        query.fileType = { $regex: /^video\//i };
+      } else if (typeLower === 'audio') {
+        query.fileType = { $regex: /^audio\//i };
+      } else if (typeLower === 'text') {
+        query.fileType = { $regex: /(text\/|application\/javascript|application\/json)/i };
+      } else if (typeLower === 'document') {
+        // Office documents
+        query.fileName = { $regex: /\.(doc|docx|xls|xlsx|ppt|pptx)$/i };
+      }
+    }
+
+    // Text search
+    if (search) {
+      query.fileName = { $regex: search, $options: 'i' };
+    }
+
+    // Sorting
+    let sortOptions = { createdAt: -1 }; // default: newest
+    if (sortBy) {
+      switch (sortBy) {
+        case 'createdAt_asc':
+          sortOptions = { createdAt: 1 };
+          break;
+        case 'fileSize_desc':
+          sortOptions = { fileSize: -1 };
+          break;
+        case 'fileSize_asc':
+          sortOptions = { fileSize: 1 };
+          break;
+        case 'fileName_asc':
+          sortOptions = { fileName: 1 };
+          break;
+        case 'fileName_desc':
+          sortOptions = { fileName: -1 };
+          break;
+        case 'createdAt_desc':
+        default:
+          sortOptions = { createdAt: -1 };
+          break;
+      }
+    }
+
+    const files = await File.find(query).sort(sortOptions);
     res.json(files);
   } catch (error) {
     console.error('Error fetching user files:', error);
@@ -240,6 +338,8 @@ export const getDownloadUrl = async (req, res) => {
     }
 
     if (requesterId && file.owner && requesterId === file.owner._id.toString()) {
+      hasAccess = true;
+    } else if (requesterId && file.sharedWith && file.sharedWith.some(share => share.user && share.user.toString() === requesterId)) {
       hasAccess = true;
     } else if (file.isShared) {
       // Check link expiration
@@ -533,5 +633,467 @@ export const toggleTrashFile = async (req, res) => {
   } catch (error) {
     console.error('Error trashing file:', error);
     res.status(500).json({ message: 'Failed to trash file', error: error.message });
+  }
+};
+
+// @desc    Share a file with an email address
+// @route   POST /api/files/share/:fileId
+// @access  Private
+export const shareFileWithUser = async (req, res) => {
+  const { fileId } = req.params;
+  const { email, permission } = req.body;
+
+  try {
+    if (!email) {
+      return res.status(400).json({ message: 'Please provide an email address' });
+    }
+
+    const file = await File.findOne({ _id: fileId, owner: req.user._id });
+    if (!file) {
+      return res.status(404).json({ message: 'File not found or unauthorized access' });
+    }
+
+    // Find the user to share with
+    const targetUser = await User.findOne({ email: email.toLowerCase() });
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found with this email' });
+    }
+
+    if (targetUser._id.toString() === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot share files with yourself' });
+    }
+
+    const isAlreadyShared = file.sharedWith.some(
+      (share) => share.user.toString() === targetUser._id.toString()
+    );
+
+    if (isAlreadyShared) {
+      file.sharedWith = file.sharedWith.map((share) =>
+        share.user.toString() === targetUser._id.toString()
+          ? { ...share, permission: permission || 'view' }
+          : share
+      );
+    } else {
+      file.sharedWith.push({
+        user: targetUser._id,
+        email: targetUser.email,
+        permission: permission || 'view'
+      });
+    }
+
+    await file.save();
+    const updatedFile = await File.findById(fileId).populate('sharedWith.user', 'name email');
+    res.json(updatedFile);
+  } catch (error) {
+    console.error('Error sharing file:', error);
+    res.status(500).json({ message: 'Failed to share file', error: error.message });
+  }
+};
+
+// @desc    Revoke file access for a user
+// @route   DELETE /api/files/share/:fileId/:userId
+// @access  Private
+export const removeFileShare = async (req, res) => {
+  const { fileId, userId } = req.params;
+
+  try {
+    const file = await File.findOne({ _id: fileId, owner: req.user._id });
+    if (!file) {
+      return res.status(404).json({ message: 'File not found or unauthorized access' });
+    }
+
+    file.sharedWith = file.sharedWith.filter(
+      (share) => share.user.toString() !== userId
+    );
+
+    await file.save();
+    const updatedFile = await File.findById(fileId).populate('sharedWith.user', 'name email');
+    res.json(updatedFile);
+  } catch (error) {
+    console.error('Error removing file share:', error);
+    res.status(500).json({ message: 'Failed to remove sharing', error: error.message });
+  }
+};
+
+// @desc    Get all files shared with the current user
+// @route   GET /api/files/shared-with-me
+// @access  Private
+export const getSharedWithMe = async (req, res) => {
+  try {
+    const files = await File.find({
+      'sharedWith.user': req.user._id,
+      isTrashed: false
+    }).populate('owner', 'name email').sort({ createdAt: -1 });
+
+    res.json(files);
+  } catch (error) {
+    console.error('Error fetching shared files:', error);
+    res.status(500).json({ message: 'Failed to fetch shared files', error: error.message });
+  }
+};
+
+// @desc    Get all historical versions of a file
+// @route   GET /api/files/:fileId/versions
+// @access  Private
+export const getFileVersions = async (req, res) => {
+  const { fileId } = req.params;
+
+  try {
+    const file = await File.findOne({ _id: fileId, owner: req.user._id });
+    if (!file) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    res.json(file.versions || []);
+  } catch (error) {
+    console.error('Error fetching file versions:', error);
+    res.status(500).json({ message: 'Failed to fetch file versions', error: error.message });
+  }
+};
+
+// @desc    Restore a past version of a file
+// @route   POST /api/files/:fileId/versions/:versionNumber/restore
+// @access  Private
+export const restoreFileVersion = async (req, res) => {
+  const { fileId, versionNumber } = req.params;
+
+  try {
+    const file = await File.findOne({ _id: fileId, owner: req.user._id });
+    if (!file) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    const versionIndex = file.versions.findIndex(
+      (v) => v.versionNumber === parseInt(versionNumber)
+    );
+
+    if (versionIndex === -1) {
+      return res.status(404).json({ message: 'Specified version not found' });
+    }
+
+    const versionToRestore = file.versions[versionIndex];
+
+    // Backup current active details
+    const currentS3Key = file.s3Key;
+    const currentFileSize = file.fileSize;
+    const currentUploadedAt = file.updatedAt || new Date();
+    const newVersionNum = (file.versions?.length || 0) + 1;
+
+    // Set version target details as active
+    file.s3Key = versionToRestore.s3Key;
+    file.fileSize = versionToRestore.fileSize;
+
+    // Remove target version, insert backup of current version in its place
+    file.versions.splice(versionIndex, 1);
+    
+    file.versions.push({
+      versionNumber: newVersionNum,
+      s3Key: currentS3Key,
+      fileSize: currentFileSize,
+      uploadedAt: currentUploadedAt
+    });
+
+    await file.save();
+    res.json(file);
+  } catch (error) {
+    console.error('Error restoring file version:', error);
+    res.status(500).json({ message: 'Failed to restore version', error: error.message });
+  }
+};
+
+// @desc    Delete a specific historical version
+// @route   DELETE /api/files/:fileId/versions/:versionNumber
+// @access  Private
+export const deleteFileVersion = async (req, res) => {
+  const { fileId, versionNumber } = req.params;
+
+  try {
+    const file = await File.findOne({ _id: fileId, owner: req.user._id });
+    if (!file) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    const versionIndex = file.versions.findIndex(
+      (v) => v.versionNumber === parseInt(versionNumber)
+    );
+
+    if (versionIndex === -1) {
+      return res.status(404).json({ message: 'Version not found' });
+    }
+
+    const version = file.versions[versionIndex];
+
+    // Delete S3 object or local mock file
+    try {
+      if (isAWSConfigured()) {
+        const client = getS3Client();
+        const command = new DeleteObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: version.s3Key,
+        });
+        await client.send(command);
+      } else {
+        const filePath = path.join(process.cwd(), 'uploads', version.s3Key);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    } catch (err) {
+      console.error(`S3 deletion failed for version ${versionNumber}:`, err.message);
+    }
+
+    file.versions.splice(versionIndex, 1);
+    await file.save();
+
+    res.json({ message: 'Version deleted successfully', file });
+  } catch (error) {
+    console.error('Error deleting version:', error);
+    res.status(500).json({ message: 'Failed to delete version', error: error.message });
+  }
+};
+
+// @desc    Soft delete files/folders in bulk
+// @route   POST /api/files/bulk-trash
+// @access  Private
+export const bulkTrashFiles = async (req, res) => {
+  const { fileIds, folderIds } = req.body;
+
+  try {
+    const user = req.user._id;
+
+    if (fileIds && fileIds.length > 0) {
+      await File.updateMany(
+        { _id: { $in: fileIds }, owner: user },
+        { isTrashed: true }
+      );
+    }
+
+    if (folderIds && folderIds.length > 0) {
+      await Folder.updateMany(
+        { _id: { $in: folderIds }, owner: user },
+        { isTrashed: true }
+      );
+      // Soft delete files matching these folders
+      const folders = await Folder.find({ _id: { $in: folderIds }, owner: user });
+      const folderNames = folders.map(f => f.name);
+      await File.updateMany(
+        { folder: { $in: folderNames }, owner: user },
+        { isTrashed: true }
+      );
+    }
+
+    res.json({ message: 'Items trashed successfully' });
+  } catch (error) {
+    console.error('Error bulk trashing:', error);
+    res.status(500).json({ message: 'Bulk trash failed', error: error.message });
+  }
+};
+
+// @desc    Restore files/folders in bulk from trash
+// @route   POST /api/files/bulk-restore
+// @access  Private
+export const bulkRestoreFiles = async (req, res) => {
+  const { fileIds, folderIds } = req.body;
+
+  try {
+    const user = req.user._id;
+
+    if (fileIds && fileIds.length > 0) {
+      await File.updateMany(
+        { _id: { $in: fileIds }, owner: user },
+        { isTrashed: false }
+      );
+    }
+
+    if (folderIds && folderIds.length > 0) {
+      await Folder.updateMany(
+        { _id: { $in: folderIds }, owner: user },
+        { isTrashed: false }
+      );
+      const folders = await Folder.find({ _id: { $in: folderIds }, owner: user });
+      const folderNames = folders.map(f => f.name);
+      await File.updateMany(
+        { folder: { $in: folderNames }, owner: user },
+        { isTrashed: false }
+      );
+    }
+
+    res.json({ message: 'Items restored successfully' });
+  } catch (error) {
+    console.error('Error bulk restoring:', error);
+    res.status(500).json({ message: 'Bulk restore failed', error: error.message });
+  }
+};
+
+// @desc    Permanently delete files/folders in bulk
+// @route   POST /api/files/bulk-delete
+// @access  Private
+export const bulkDeleteFiles = async (req, res) => {
+  const { fileIds, folderIds } = req.body;
+
+  try {
+    const user = req.user._id;
+
+    if (fileIds && fileIds.length > 0) {
+      const files = await File.find({ _id: { $in: fileIds }, owner: user });
+
+      for (const file of files) {
+        try {
+          if (isAWSConfigured()) {
+            const client = getS3Client();
+            await client.send(new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: file.s3Key,
+            }));
+
+            for (const ver of file.versions || []) {
+              await client.send(new DeleteObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: ver.s3Key,
+              }));
+            }
+          } else {
+            const filePath = path.join(process.cwd(), 'uploads', file.s3Key);
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+            for (const ver of file.versions || []) {
+              const verPath = path.join(process.cwd(), 'uploads', ver.s3Key);
+              if (fs.existsSync(verPath)) fs.unlinkSync(verPath);
+            }
+          }
+        } catch (err) {
+          console.error(`S3 deletion failed for ${file.fileName}:`, err.message);
+        }
+      }
+
+      await File.deleteMany({ _id: { $in: fileIds }, owner: user });
+    }
+
+    if (folderIds && folderIds.length > 0) {
+      const folders = await Folder.find({ _id: { $in: folderIds }, owner: user });
+      const folderNames = folders.map(f => f.name);
+
+      const filesInFolders = await File.find({ folder: { $in: folderNames }, owner: user });
+      const innerFileIds = filesInFolders.map(f => f._id);
+
+      if (innerFileIds.length > 0) {
+        await File.deleteMany({ _id: { $in: innerFileIds }, owner: user });
+        for (const file of filesInFolders) {
+          try {
+            if (isAWSConfigured()) {
+              const client = getS3Client();
+              await client.send(new DeleteObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key: file.s3Key }));
+              for (const ver of file.versions || []) {
+                await client.send(new DeleteObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key: ver.s3Key }));
+              }
+            } else {
+              const filePath = path.join(process.cwd(), 'uploads', file.s3Key);
+              if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+              for (const ver of file.versions || []) {
+                const verPath = path.join(process.cwd(), 'uploads', ver.s3Key);
+                if (fs.existsSync(verPath)) fs.unlinkSync(verPath);
+              }
+            }
+          } catch (err) {
+            console.error(`S3 deletion failed during folder sweep:`, err.message);
+          }
+        }
+      }
+
+      await Folder.deleteMany({ _id: { $in: folderIds }, owner: user });
+    }
+
+    res.json({ message: 'Items deleted permanently' });
+  } catch (error) {
+    console.error('Error bulk deleting:', error);
+    res.status(500).json({ message: 'Bulk delete failed', error: error.message });
+  }
+};
+
+// @desc    Move files to a new folder in bulk
+// @route   POST /api/files/bulk-move
+// @access  Private
+export const bulkMoveFiles = async (req, res) => {
+  const { fileIds, folderName } = req.body;
+
+  try {
+    const user = req.user._id;
+
+    if (folderName && folderName !== 'Root') {
+      const folder = await Folder.findOne({ name: folderName, owner: user });
+      if (!folder) {
+        return res.status(404).json({ message: 'Target folder does not exist' });
+      }
+    }
+
+    await File.updateMany(
+      { _id: { $in: fileIds }, owner: user },
+      { folder: folderName || 'Root' }
+    );
+
+    res.json({ message: 'Files moved successfully' });
+  } catch (error) {
+    console.error('Error bulk moving files:', error);
+    res.status(500).json({ message: 'Bulk move failed', error: error.message });
+  }
+};
+
+// @desc    Download multiple files bundled inside a zip archive
+// @route   GET /api/files/bulk-download
+// @access  Private
+export const bulkDownloadFiles = async (req, res) => {
+  const { ids } = req.query;
+
+  if (!ids) {
+    return res.status(400).json({ message: 'Please provide file IDs' });
+  }
+
+  const fileIds = ids.split(',');
+
+  try {
+    const files = await File.find({ _id: { $in: fileIds }, owner: req.user._id });
+    if (files.length === 0) {
+      return res.status(404).json({ message: 'No files found to download' });
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="cloudvault-bulk-download.zip"');
+
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+
+    archive.on('error', (err) => {
+      console.error('Archiver error:', err);
+      res.status(500).send({ message: 'Zip generation failed', error: err.message });
+    });
+
+    archive.pipe(res);
+
+    for (const file of files) {
+      try {
+        if (isAWSConfigured()) {
+          const client = getS3Client();
+          const s3Command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: file.s3Key,
+          });
+          const s3Response = await client.send(s3Command);
+          archive.append(s3Response.Body, { name: file.fileName });
+        } else {
+          const filePath = path.join(process.cwd(), 'uploads', file.s3Key);
+          if (fs.existsSync(filePath)) {
+            archive.append(fs.createReadStream(filePath), { name: file.fileName });
+          }
+        }
+      } catch (fileErr) {
+        console.error(`Failed to pack file ${file.fileName}:`, fileErr.message);
+      }
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    console.error('Error in bulk download:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Bulk download failed', error: error.message });
+    }
   }
 };

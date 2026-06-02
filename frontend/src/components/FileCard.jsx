@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshFiles, folders = [], onViewFile }) {
+export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshFiles, folders = [], onViewFile, selectedFileIds = [], setSelectedFileIds }) {
   const { api, apiBaseUrl, user } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -164,8 +164,36 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
     });
   };
 
+  const isFileSelected = selectedFileIds.includes(file._id);
+
   return (
-    <div className="group relative flex flex-col justify-between min-h-[175px] rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 transition-all duration-300 ease-in-out hover:-translate-y-1 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-2xl hover:shadow-indigo-500/5 dark:hover:bg-zinc-900/40">
+    <div className={`group relative flex flex-col justify-between min-h-[175px] rounded-2xl border p-5 transition-all duration-300 ease-in-out hover:-translate-y-1 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-2xl hover:shadow-indigo-500/5 hover:bg-zinc-90-selected dark:hover:bg-zinc-900/45 ${
+      isFileSelected
+        ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-950/20 shadow-md'
+        : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'
+    }`}>
+      
+      {/* File Select Checkbox */}
+      <div
+        className={`absolute top-2.5 left-2.5 z-20 transition-opacity duration-200 ${
+          isFileSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isFileSelected) {
+            setSelectedFileIds(selectedFileIds.filter((id) => id !== file._id));
+          } else {
+            setSelectedFileIds([...selectedFileIds, file._id]);
+          }
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={isFileSelected}
+          onChange={() => {}}
+          className="h-3.5 w-3.5 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-550 cursor-pointer"
+        />
+      </div>
       
       {/* Glow highlight on card hover */}
       <div className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-tr from-indigo-500/0 to-indigo-500/2 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />

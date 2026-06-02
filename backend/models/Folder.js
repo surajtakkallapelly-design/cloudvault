@@ -11,6 +11,30 @@ const folderSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'Folder owner is required'],
   },
+  sharedWith: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    email: {
+      type: String,
+      required: true
+    },
+    permission: {
+      type: String,
+      enum: ['view', 'edit'],
+      default: 'view'
+    },
+    sharedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  isTrashed: {
+    type: Boolean,
+    default: false,
+  },
 }, {
   timestamps: true,
 });

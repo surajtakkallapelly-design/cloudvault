@@ -39,7 +39,11 @@ export default function FileGrid({
   searchVal, 
   currentTab = 'my-files', 
   onShareClick,
-  onViewFile
+  onViewFile,
+  selectedFileIds = [],
+  setSelectedFileIds,
+  selectedFolderIds = [],
+  setSelectedFolderIds
 }) {
   const { api, apiBaseUrl, user } = useAuth();
   const [viewMode, setViewMode] = useState('grid');
@@ -243,22 +247,51 @@ export default function FileGrid({
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Folders</h3>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {folders.map((folder) => (
-              <div
-                key={folder._id}
-                onClick={() => setActiveFolder(folder.name)}
-                className="group flex items-center gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-3.5 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all duration-300 cursor-pointer"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                  <FolderOpen className="h-4.5 w-4.5" />
+            {folders.map((folder) => {
+              const isFolderSelected = selectedFolderIds.includes(folder._id);
+              return (
+                <div
+                  key={folder._id}
+                  onClick={() => setActiveFolder(folder.name)}
+                  className={`group relative flex items-center gap-3 rounded-xl border p-3.5 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all duration-300 cursor-pointer ${
+                    isFolderSelected 
+                      ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-950/20' 
+                      : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'
+                  }`}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                    <FolderOpen className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-zinc-800 dark:text-zinc-250" title={folder.name}>
+                      {folder.name}
+                    </p>
+                  </div>
+
+                  {/* Folder Select Checkbox */}
+                  <div
+                    className={`absolute top-2 right-2 transition-opacity duration-200 ${
+                      isFolderSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isFolderSelected) {
+                        setSelectedFolderIds(selectedFolderIds.filter((id) => id !== folder._id));
+                      } else {
+                        setSelectedFolderIds([...selectedFolderIds, folder._id]);
+                      }
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isFolderSelected}
+                      onChange={() => {}}
+                      className="h-3.5 w-3.5 rounded border-zinc-300 text-indigo-650 focus:ring-indigo-550 cursor-pointer"
+                    />
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-zinc-800 dark:text-zinc-250" title={folder.name}>
-                    {folder.name}
-                  </p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -306,6 +339,8 @@ export default function FileGrid({
               refreshFiles={refreshFiles}
               folders={folders}
               onViewFile={onViewFile}
+              selectedFileIds={selectedFileIds}
+              setSelectedFileIds={setSelectedFileIds}
             />
           ))}
         </div>
@@ -315,6 +350,20 @@ export default function FileGrid({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-200 dark:border-zinc-900 bg-zinc-50 dark:bg-zinc-950/50 text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-widest">
+                <th className="w-10 px-5 py-3.5">
+                  <input
+                    type="checkbox"
+                    checked={filteredFiles.length > 0 && selectedFileIds.length === filteredFiles.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedFileIds(filteredFiles.map(f => f._id));
+                      } else {
+                        setSelectedFileIds([]);
+                      }
+                    }}
+                    className="h-3.5 w-3.5 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                </th>
                 <th className="px-5 py-3.5">Filename</th>
                 <th className="px-5 py-3.5">Size</th>
                 <th className="px-5 py-3.5">Created At</th>
@@ -329,7 +378,26 @@ export default function FileGrid({
                 const isDeleting = deletingId === file._id;
 
                 return (
-                  <tr key={file._id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/35 border-b border-zinc-100 dark:border-zinc-900/40 last:border-b-0 transition-colors group">
+                  <tr 
+                    key={file._id} 
+                    className={`hover:bg-zinc-50/50 dark:hover:bg-zinc-900/35 border-b border-zinc-100 dark:border-zinc-900/40 last:border-b-0 transition-colors group ${
+                      selectedFileIds.includes(file._id) ? 'bg-indigo-500/5 dark:bg-indigo-950/10' : ''
+                    }`}
+                  >
+                    <td className="w-10 px-5 py-3.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedFileIds.includes(file._id)}
+                        onChange={() => {
+                          if (selectedFileIds.includes(file._id)) {
+                            setSelectedFileIds(selectedFileIds.filter(id => id !== file._id));
+                          } else {
+                            setSelectedFileIds([...selectedFileIds, file._id]);
+                          }
+                        }}
+                        className="h-3.5 w-3.5 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-550 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-5 py-3.5 max-w-xs sm:max-w-md">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${color}`}>

@@ -37,6 +37,44 @@ const fileSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  sharedWith: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    email: {
+      type: String,
+      required: true
+    },
+    permission: {
+      type: String,
+      enum: ['view', 'edit'],
+      default: 'view'
+    },
+    sharedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  versions: [{
+    versionNumber: {
+      type: Number,
+      required: true
+    },
+    s3Key: {
+      type: String,
+      required: true
+    },
+    fileSize: {
+      type: Number,
+      required: true
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   isStarred: {
     type: Boolean,
     default: false,

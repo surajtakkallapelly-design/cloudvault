@@ -4,7 +4,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import DropzoneUpload from '../components/DropzoneUpload';
 import FileGrid from '../components/FileGrid';
 import ShareModal from '../components/ShareModal';
-import { FolderPlus, ChevronRight, Cloud, Lock, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { FolderPlus, ChevronRight, Cloud, Lock, CheckCircle, AlertTriangle, RefreshCw, Download, ArrowUpDown, Trash, RotateCcw, FolderClosed, Users, Check, Filter } from 'lucide-react';
 import { UploadProvider } from '../context/UploadContext';
 import UploadDrawer from '../components/UploadDrawer';
 import FilePreviewModal from '../components/FilePreviewModal';
@@ -22,6 +22,13 @@ export default function Dashboard() {
   const [showStatsDropdown, setShowStatsDropdown] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const [hoveredCategory, setHoveredCategory] = useState(null);
+
+  // Advanced filters & bulk selection states
+  const [fileTypeFilter, setFileTypeFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('createdAt_desc');
+  const [selectedFileIds, setSelectedFileIds] = useState([]);
+  const [selectedFolderIds, setSelectedFolderIds] = useState([]);
+  const [showMoveModal, setShowMoveModal] = useState(false);
 
   // Event listener to refresh files when parallel uploads succeed
   useEffect(() => {
@@ -128,8 +135,21 @@ export default function Dashboard() {
   const fetchFiles = async () => {
     try {
       setLoading(true);
-      const { data } = await api.get('/api/files/my-files');
-      setFiles(data);
+      if (currentTab === 'shared') {
+        const { data } = await api.get('/api/files/shared-with-me');
+        setFiles(data);
+      } else {
+        const params = {
+          sortBy,
+          type: fileTypeFilter,
+          starred: currentTab === 'starred' ? 'true' : 'false',
+          trash: currentTab === 'trash' ? 'true' : 'false',
+          folder: currentTab === 'my-files' ? activeFolder : '',
+          search: searchVal
+        };
+        const { data } = await api.get('/api/files/my-files', { params });
+        setFiles(data);
+      }
     } catch (err) {
       console.error('Error fetching files:', err);
     } finally {
@@ -151,8 +171,17 @@ export default function Dashboard() {
     fetchFolders();
   };
 
+  // Refetch files on navigation, sorting, filter or search changes
   useEffect(() => {
-    fetchAllData();
+    fetchFiles();
+    // Clear selection when tab or folder changes to prevent accidental bulk actions
+    setSelectedFileIds([]);
+    setSelectedFolderIds([]);
+  }, [currentTab, activeFolder, sortBy, fileTypeFilter, searchVal]);
+
+  // Initial fetch for folders (files are fetched by the above useEffect)
+  useEffect(() => {
+    fetchFolders();
   }, []);
 
   const handleCreateFolder = async () => {
@@ -168,7 +197,116 @@ export default function Dashboard() {
     }
   };
 
-  const handleShareToggle = async (fileId) => {
+  const handleBulkTrash = async () => {
+    const totalSelected = selectedFileIds.length + selectedFolderIds.length;
+    if (totalSelected === 0) return;
+    if (window.confirm(`Are you sure you want to move the ${totalSelected} selected item(s) to the trash?`)) {
+      try {
+        setLoading(true);
+        await api.post('/api/files/bulk-trash', {
+          fileIds: selectedFileIds,
+          folderIds: selectedFolderIds
+        });
+        setSelectedFileIds([]);
+        setSelectedFolderIds([]);
+        fetchAllData();
+      } catch (err) {
+        alert('Failed to trash items: ' + (err.response?.data?.message || err.message));
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    const totalSelected = selectedFileIds.length + selectedFolderIds.length;
+    if (totalSelected === 0) return;
+    try {
+      setLoading(true);
+      await api.post('/api/files/bulk-restore', {
+        fileIds: selectedFileIds,
+        folderIds: selectedFolderIds
+      });
+      setSelectedFileIds([]);
+      setSelectedFolderIds([]);
+      fetchAllData();
+    } catch (err) {
+      alert('Failed to restore items: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const totalSelected = selectedFileIds.length + selectedFolderIds.length;
+    if (totalSelected === 0) return;
+    if (window.confirm(`WARNING: This will PERMANENTLY delete the ${selectedFileIds.length} selected file(s) and ${selectedFolderIds.length} selected folder(s) and all their contents from storage. This action CANNOT be undone. Are you sure?`)) {
+      try {
+        setLoading(true);
+        await api.post('/api/files/bulk-delete', {
+          fileIds: selectedFileIds,
+          folderIds: selectedFolderIds
+        });
+        setSelectedFileIds([]);
+        setSelectedFolderIds([]);
+        fetchAllData();
+      } catch (err) {
+        alert('Failed to permanently delete items: ' + (err.response?.data?.message || err.message));
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedFileIds.length === 0) {
+      alert('Please select files (not folders) to download.');
+      return;
+    }
+    try {
+      const token = user?.token;
+      const idsParam = selectedFileIds.join(',');
+      const downloadUrl = `${api.defaults.baseURL || ''}/api/files/bulk-download?ids=${idsParam}&token=${token}`;
+      
+      // Trigger download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', 'cloudvault-bulk-download.zip');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setSelectedFileIds([]);
+    } catch (err) {
+      alert('Failed to start bulk download: ' + err.message);
+    }
+  };
+
+  const handleBulkMove = async (targetFolder) => {
+    if (selectedFileIds.length === 0) return;
+    try {
+      setLoading(true);
+      await api.post('/api/files/bulk-move', {
+        fileIds: selectedFileIds,
+        folderName: targetFolder
+      });
+      setSelectedFileIds([]);
+      setSelectedFolderIds([]);
+      setShowMoveModal(false);
+      fetchAllData();
+    } catch (err) {
+      alert('Failed to move files: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShareToggle = async (fileId, updatedData = null) => {
+    if (updatedData) {
+      setFiles((prev) => prev.map((f) => f._id === fileId ? updatedData : f));
+      setSharingFile(updatedData);
+      return;
+    }
     try {
       const { data } = await api.post(`/api/files/share/${fileId}`);
       setFiles((prev) => prev.map((f) => f._id === fileId ? data : f));
@@ -767,7 +905,131 @@ export default function Dashboard() {
           )}
 
           {/* Files Grid and view toggles */}
-          <div className="glass-card rounded-3xl p-6 border border-zinc-200/60 dark:border-zinc-850 bg-white dark:bg-zinc-950/20">
+          <div className="glass-card rounded-3xl p-6 border border-zinc-200/60 dark:border-zinc-850 bg-white dark:bg-zinc-950/20 relative">
+            
+            {/* Bulk Actions Floating Bar */}
+            {(selectedFileIds.length > 0 || selectedFolderIds.length > 0) && (
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-indigo-600 p-4 text-white shadow-lg animate-in slide-in-from-top-4 duration-300">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20 text-white font-extrabold text-xs">
+                    {selectedFileIds.length + selectedFolderIds.length}
+                  </div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-white">Items Selected</span>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Download (Files only) */}
+                  {selectedFileIds.length > 0 && (
+                    <button
+                      onClick={handleBulkDownload}
+                      className="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer text-white"
+                      title="Download selected files as ZIP"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download ZIP
+                    </button>
+                  )}
+
+                  {/* Move (Files only) */}
+                  {selectedFileIds.length > 0 && currentTab === 'my-files' && (
+                    <button
+                      onClick={() => setShowMoveModal(true)}
+                      className="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer text-white"
+                    >
+                      <FolderClosed className="h-3.5 w-3.5" />
+                      Move
+                    </button>
+                  )}
+
+                  {/* Trash / Restore / Delete */}
+                  {currentTab === 'trash' ? (
+                    <>
+                      <button
+                        onClick={handleBulkRestore}
+                        className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer text-white"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Restore
+                      </button>
+                      <button
+                        onClick={handleBulkDelete}
+                        className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer text-white"
+                      >
+                        <Trash className="h-3.5 w-3.5" />
+                        Delete Forever
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={handleBulkTrash}
+                      className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer text-white"
+                    >
+                      <Trash className="h-3.5 w-3.5" />
+                      Move to Trash
+                    </button>
+                  )}
+
+                  {/* Clear Selection */}
+                  <button
+                    onClick={() => { setSelectedFileIds([]); setSelectedFolderIds([]); }}
+                    className="text-xs font-bold uppercase hover:underline ml-2 transition-all cursor-pointer text-zinc-200"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Filters and Sorting Bar */}
+            {currentTab !== 'settings' && (
+              <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-150 dark:border-zinc-900 pb-5">
+                {/* Category Chips */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { label: 'All', id: 'all' },
+                    { label: 'Images', id: 'image' },
+                    { label: 'PDFs', id: 'pdf' },
+                    { label: 'Documents', id: 'document' },
+                    { label: 'Videos', id: 'video' },
+                    { label: 'Audio', id: 'audio' },
+                    { label: 'Code/Text', id: 'text' },
+                  ].map((chip) => {
+                    const isActive = fileTypeFilter === chip.id;
+                    return (
+                      <button
+                        key={chip.id}
+                        onClick={() => setFileTypeFilter(chip.id)}
+                        className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Sort Option Control */}
+                <div className="flex items-center gap-2 self-end md:self-auto">
+                  <ArrowUpDown className="h-3.5 w-3.5 text-zinc-400" />
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value="createdAt_desc" className="bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200">Newest First</option>
+                    <option value="createdAt_asc" className="bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200">Oldest First</option>
+                    <option value="fileSize_desc" className="bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200">Size: Largest</option>
+                    <option value="fileSize_asc" className="bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200">Size: Smallest</option>
+                    <option value="fileName_asc" className="bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200">Name: A-Z</option>
+                    <option value="fileName_desc" className="bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200">Name: Z-A</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
             <FileGrid 
               files={files} 
               folders={folders}
@@ -779,6 +1041,10 @@ export default function Dashboard() {
               currentTab={currentTab}
               onShareClick={(file) => setSharingFile(file)}
               onViewFile={setPreviewFile}
+              selectedFileIds={selectedFileIds}
+              setSelectedFileIds={setSelectedFileIds}
+              selectedFolderIds={selectedFolderIds}
+              setSelectedFolderIds={setSelectedFolderIds}
             />
           </div>
         </div>
@@ -836,7 +1102,49 @@ export default function Dashboard() {
       isOpen={!!previewFile} 
       onClose={() => setPreviewFile(null)} 
       file={previewFile} 
+      refreshFiles={fetchFiles}
     />
+      {/* Bulk Move Target Folder Selection Modal */}
+      {showMoveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowMoveModal(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-zinc-950 border border-zinc-800 p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-left" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-white">Move files to folder</h3>
+            <p className="text-xs text-zinc-500 mt-1">Select the destination folder for the {selectedFileIds.length} selected file(s).</p>
+            
+            <div className="mt-4 max-h-60 overflow-y-auto space-y-1.5 pr-1">
+              {/* Root option */}
+              <button
+                onClick={() => handleBulkMove('Root')}
+                className="flex w-full items-center gap-2.5 rounded-xl bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 px-4 py-3 text-xs font-bold text-zinc-200 text-left transition-all cursor-pointer"
+              >
+                <FolderClosed className="h-4 w-4 text-indigo-500" />
+                Root Directory
+              </button>
+
+              {/* User custom folders list */}
+              {folders.map((folderItem) => (
+                <button
+                  key={folderItem._id}
+                  onClick={() => handleBulkMove(folderItem.name)}
+                  className="flex w-full items-center gap-2.5 rounded-xl bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 px-4 py-3 text-xs font-bold text-zinc-200 text-left transition-all cursor-pointer"
+                >
+                  <FolderClosed className="h-4 w-4 text-indigo-500" />
+                  {folderItem.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setShowMoveModal(false)}
+                className="rounded-xl border border-zinc-800 hover:bg-zinc-900 px-4 py-2.5 text-xs font-bold text-zinc-400 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </UploadProvider>
   );
 }

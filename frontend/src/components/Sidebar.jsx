@@ -21,7 +21,7 @@ export default function Sidebar({ currentTab, setCurrentTab }) {
     { name: 'All Files', icon: HardDrive, id: 'my-files' },
     { name: 'Recent', icon: Clock, id: 'recent' },
     { name: 'Starred', icon: Star, id: 'starred' },
-    { name: 'Shared Docs', icon: Share2, id: 'shared' },
+    { name: 'Shared with me', icon: Share2, id: 'shared' },
     { name: 'Trash', icon: Trash2, id: 'trash' },
     { name: 'Settings', icon: SettingsIcon, id: 'settings' },
   ];
