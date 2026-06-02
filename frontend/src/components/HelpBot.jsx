@@ -31,8 +31,17 @@ export default function HelpBot() {
   const getBotResponse = (query) => {
     const q = query.toLowerCase();
     
+    if (q.includes('preview') || q.includes('view') || q.includes('see') || q.includes('open') || q.includes('player') || q.includes('lightbox')) {
+      return 'You can view documents and media files directly in CloudVault! Just click "View" (the Eye icon) on any card or list row to open the built-in glassmorphic File Previewer. It supports:\n• Images (responsive lightbox)\n• Videos & Audio (inline players)\n• PDFs (sandboxed iframes)\n• Text & Code (full scrollable viewers with dynamic clipboard copying)';
+    }
+    if (q.includes('chart') || q.includes('donut') || q.includes('breakdown') || q.includes('category') || q.includes('legend')) {
+      return 'The "Storage Analysis" dashboard widget features an interactive conic-gradient Donut Chart detailing Images, Videos, Documents, Archives, and Others. Hovering over a legend item highlights it and displays its file count and exact capacity sizing.';
+    }
+    if (q.includes('drawer') || q.includes('queue') || q.includes('parallel') || q.includes('progress') || q.includes('concurrent')) {
+      return 'When you upload multiple files, the "Upload Queue Drawer" slides up at the bottom-right. It tracks parallel direct-to-S3 transfers concurrently, showing size details, progress percentages, and status alerts. You can minimize or clear completed uploads anytime.';
+    }
     if (q.includes('upload') || q.includes('add') || q.includes('put')) {
-      return 'To upload files:\n1. Click "All Files" on the sidebar.\n2. Drag & drop any file into the upload zone, or click it to select files.\n3. On mobile, click the floating "+" button or the bottom navigation "Upload" button.';
+      return 'To upload files:\n1. Drag & drop multiple files directly into the dashed upload card, or click it to browse local storage.\n2. The floating monitor drawer will slide up to track parallel S3 uploads.\n3. On mobile, tap the floating "+" action button at the bottom-right.';
     }
     if (q.includes('star') || q.includes('important') || q.includes('favorite')) {
       return 'You can star any file by clicking the Star outline icon on its card or in the table view. To view all your starred files, click the "Starred" tab in the sidebar.';
@@ -56,7 +65,7 @@ export default function HelpBot() {
       return 'You get 20 GB of free storage. View your metrics in the "Storage Analysis" widget.';
     }
 
-    return 'I can help you with uploads, folders, stars, trashing/restoring, global searches, user settings, and social sharing. Try asking about one of those topics, or contact support@cloudvault.com!';
+    return 'I can help you with uploads, built-in previews, storage category charts, trashing/restoring, global search, settings, and social sharing. Try asking about one of those topics, or contact support@cloudvault.com!';
   };
 
   const handleSend = (textToSend) => {

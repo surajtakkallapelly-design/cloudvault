@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshFiles, folders = [] }) {
+export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshFiles, folders = [], onViewFile }) {
   const { api, apiBaseUrl, user } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -84,8 +84,12 @@ export default function FileCard({ file, onShareClick, onDeleteSuccess, refreshF
   };
 
   const handleView = () => {
-    const tokenParam = user?.token ? `&token=${user.token}` : '';
-    window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}?view=true${tokenParam}`, '_blank');
+    if (onViewFile) {
+      onViewFile(file);
+    } else {
+      const tokenParam = user?.token ? `&token=${user.token}` : '';
+      window.open(`${apiBaseUrl}/api/files/download/${file.s3Key}?view=true${tokenParam}`, '_blank');
+    }
   };
 
   const handleToggleStar = async (e) => {

@@ -5,6 +5,9 @@ import DropzoneUpload from '../components/DropzoneUpload';
 import FileGrid from '../components/FileGrid';
 import ShareModal from '../components/ShareModal';
 import { FolderPlus, ChevronRight, Cloud, Lock, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { UploadProvider } from '../context/UploadContext';
+import UploadDrawer from '../components/UploadDrawer';
+import FilePreviewModal from '../components/FilePreviewModal';
 
 export default function Dashboard() {
   const { api, user, updateUser } = useAuth();
@@ -17,6 +20,19 @@ export default function Dashboard() {
   const [sharingFile, setSharingFile] = useState(null);
   const [statsView, setStatsView] = useState('Monthly');
   const [showStatsDropdown, setShowStatsDropdown] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
+  const [hoveredCategory, setHoveredCategory] = useState(null);
+
+  // Event listener to refresh files when parallel uploads succeed
+  useEffect(() => {
+    const handleFilesUpdated = () => {
+      fetchAllData();
+    };
+    window.addEventListener('vault-files-updated', handleFilesUpdated);
+    return () => {
+      window.removeEventListener('vault-files-updated', handleFilesUpdated);
+    };
+  }, []);
 
   // Settings states
   const [settingsName, setSettingsName] = useState('');
@@ -177,7 +193,8 @@ export default function Dashboard() {
   };
 
   return (
-    <DashboardLayout
+    <UploadProvider>
+      <DashboardLayout
       currentTab={currentTab}
       setCurrentTab={setCurrentTab}
       searchVal={searchVal}
@@ -469,25 +486,94 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Storage limit calculation */}
+                {/* Storage limit calculation & Donut Chart breakdown */}
                 {(() => {
                   const storageLimit = 20 * 1024 * 1024 * 1024;
                   const storagePercent = Math.min((totalSize / storageLimit) * 100, 100).toFixed(1);
+                  
+                  // Categorize files
+                  const categories = {
+                    Images: { size: 0, count: 0, color: '#6366f1', bgClass: 'bg-indigo-500 border-indigo-500/30' },
+                    Videos: { size: 0, count: 0, color: '#3b82f6', bgClass: 'bg-blue-500 border-blue-500/30' },
+                    Documents: { size: 0, count: 0, color: '#10b981', bgClass: 'bg-emerald-500 border-emerald-500/30' },
+                    Archives: { size: 0, count: 0, color: '#f97316', bgClass: 'bg-orange-500 border-orange-500/30' },
+                    Others: { size: 0, count: 0, color: '#64748b', bgClass: 'bg-slate-500 border-slate-500/30' }
+                  };
+
+                  files.forEach((file) => {
+                    const type = (file.fileType || '').toLowerCase();
+                    const ext = (file.fileName || '').split('.').pop().toLowerCase();
+
+                    if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+                      categories.Images.size += file.fileSize;
+                      categories.Images.count += 1;
+                    } else if (type.startsWith('video/') || ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'].includes(ext)) {
+                      categories.Videos.size += file.fileSize;
+                      categories.Videos.count += 1;
+                    } else if (type.startsWith('audio/') || type.includes('pdf') || type.includes('word') || type.includes('excel') || ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md'].includes(ext)) {
+                      categories.Documents.size += file.fileSize;
+                      categories.Documents.count += 1;
+                    } else if (type.includes('zip') || type.includes('tar') || type.includes('rar') || ['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) {
+                      categories.Archives.size += file.fileSize;
+                      categories.Archives.count += 1;
+                    } else {
+                      categories.Others.size += file.fileSize;
+                      categories.Others.count += 1;
+                    }
+                  });
+
+                  const categoriesArray = Object.entries(categories).map(([name, data]) => ({
+                    name,
+                    ...data,
+                    percent: totalSize > 0 ? (data.size / totalSize) * 100 : 0
+                  }));
+
+                  // Build CSS conic gradient
+                  let accumulatedPercent = 0;
+                  const gradientSlices = categoriesArray.map((cat) => {
+                    const start = accumulatedPercent;
+                    accumulatedPercent += cat.percent;
+                    return `${cat.color} ${start}% ${accumulatedPercent}%`;
+                  });
+                  const conicGradientString = totalSize > 0 
+                    ? `conic-gradient(${gradientSlices.join(', ')})` 
+                    : 'conic-gradient(var(--color-zinc-200, #e4e4e7) 0% 100%)';
+
                   return (
-                    <div className="grid grid-cols-2 gap-4 my-2">
-                      <div className="bg-zinc-50/50 dark:bg-zinc-900/40 rounded-2xl p-4 border border-zinc-100 dark:border-zinc-900/60">
-                        <div className="flex items-center gap-2">
-                          <div className="h-4.5 w-1.5 bg-indigo-600 dark:bg-[#dffe4c] rounded-full"></div>
-                          <span className="text-2xl font-extrabold tracking-tight">{storagePercent}%</span>
+                    <div className="flex flex-col md:flex-row items-center gap-6 my-4 select-none">
+                      {/* Left: CSS Donut Chart */}
+                      <div 
+                        className="relative shrink-0 flex items-center justify-center h-28 w-28 rounded-full shadow-inner transition-all duration-300" 
+                        style={{ background: conicGradientString }}
+                      >
+                        {/* Center circle */}
+                        <div className="absolute inset-2 bg-white dark:bg-[#111317] rounded-full flex flex-col items-center justify-center shadow-xs">
+                          <span className="text-lg font-black tracking-tight">{storagePercent}%</span>
+                          <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-bold uppercase tracking-wider">Used</span>
                         </div>
-                        <p className="text-[9px] text-zinc-450 dark:text-zinc-500 font-bold uppercase tracking-wider mt-1.5">Capacity Used</p>
                       </div>
-                      <div className="bg-zinc-50/50 dark:bg-zinc-900/40 rounded-2xl p-4 border border-zinc-100 dark:border-zinc-900/60">
-                        <div className="flex items-center gap-2">
-                          <div className="h-4.5 w-1.5 bg-purple-500 dark:bg-[#b5a3ff] rounded-full"></div>
-                          <span className="text-2xl font-extrabold tracking-tight">{formatBytes(totalSize)}</span>
-                        </div>
-                        <p className="text-[9px] text-zinc-450 dark:text-zinc-500 font-bold uppercase tracking-wider mt-1.5">Used of {formatBytes(storageLimit)} Limit</p>
+
+                      {/* Right: Category Breakdown Legend */}
+                      <div className="flex-1 w-full grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {categoriesArray.map((cat) => (
+                          <div 
+                            key={cat.name}
+                            onMouseEnter={() => setHoveredCategory(cat.name)}
+                            onMouseLeave={() => setHoveredCategory(null)}
+                            className={`p-2 rounded-xl border transition-all duration-200 ${
+                              hoveredCategory === cat.name 
+                                ? 'bg-zinc-55 dark:bg-zinc-900 border-zinc-250 dark:border-zinc-800 scale-102 shadow-xs' 
+                                : 'bg-zinc-50/20 dark:bg-zinc-900/10 border-zinc-150/40 dark:border-zinc-900/40'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <div className={`h-2 w-2 rounded-full ${cat.bgClass} border`}></div>
+                              <span className="text-[9px] font-extrabold text-zinc-550 dark:text-zinc-400 uppercase tracking-widest">{cat.name}</span>
+                            </div>
+                            <p className="text-xs font-black tracking-tight text-zinc-800 dark:text-zinc-200">{formatBytes(cat.size)}</p>
+                            <p className="text-[8px] text-zinc-450 dark:text-zinc-500 font-bold uppercase tracking-wider mt-0.5">{cat.count} file{cat.count !== 1 ? 's' : ''}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   );
@@ -692,6 +778,7 @@ export default function Dashboard() {
               searchVal={searchVal}
               currentTab={currentTab}
               onShareClick={(file) => setSharingFile(file)}
+              onViewFile={setPreviewFile}
             />
           </div>
         </div>
@@ -744,5 +831,12 @@ export default function Dashboard() {
         onShareToggle={handleShareToggle}
       />
     </DashboardLayout>
+    <UploadDrawer />
+    <FilePreviewModal 
+      isOpen={!!previewFile} 
+      onClose={() => setPreviewFile(null)} 
+      file={previewFile} 
+    />
+    </UploadProvider>
   );
 }

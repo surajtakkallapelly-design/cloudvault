@@ -16,6 +16,9 @@ const app = express();
 // Security Middlewares
 app.use(helmet({
   crossOriginResourcePolicy: false, // Required to serve static uploads from backend to React app
+  crossOriginEmbedderPolicy: false,
+  frameguard: false, // Allow PDFs and media to be rendered in iframes on client side
+  contentSecurityPolicy: false, // Disable default CSP constraints that block iframe embeddings
 }));
 app.use(cors());
 app.use(express.json());

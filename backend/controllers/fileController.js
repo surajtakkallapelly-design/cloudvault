@@ -187,6 +187,18 @@ export const shareFile = async (req, res) => {
   }
 };
 
+const isTextOrCode = (fileName, fileType = '') => {
+  const type = fileType.toLowerCase();
+  const ext = fileName.split('.').pop().toLowerCase();
+  const textExts = [
+    'txt', 'md', 'js', 'jsx', 'ts', 'tsx', 'json', 'html', 'css', 
+    'py', 'ipynb', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'php', 
+    'rb', 'swift', 'kt', 'pl', 'r', 'sh', 'go', 'rs', 'yaml', 
+    'yml', 'xml', 'sql', 'ini', 'log', 'conf', 'config', 'dockerfile'
+  ];
+  return type.startsWith('text/') || type === 'application/json' || type === 'application/javascript' || textExts.includes(ext);
+};
+
 // @desc    Download/view a file (resolves to direct S3 read URL or local mock file path)
 // @route   GET /api/files/download/:s3Key
 // @access  Public (If isShared is true and not expired) OR Private (If requester is owner)
@@ -265,7 +277,29 @@ export const getDownloadUrl = async (req, res) => {
     }
 
     if (req.query.json === 'true') {
-      res.json({ downloadUrl: finalUrl, isLocal: !isAWSConfigured() });
+      let textContent = undefined;
+      if (isTextOrCode(file.fileName, file.fileType)) {
+        try {
+          if (isAWSConfigured()) {
+            const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+            const getCommand = new GetObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: s3Key,
+            });
+            const s3Response = await getS3Client().send(getCommand);
+            textContent = await s3Response.Body.transformToString();
+          } else {
+            const filePath = path.join(process.cwd(), 'uploads', s3Key);
+            if (fs.existsSync(filePath)) {
+              textContent = fs.readFileSync(filePath, 'utf-8');
+            }
+          }
+        } catch (readErr) {
+          console.error('Error reading text/code file content on backend:', readErr);
+          textContent = 'Error: Failed to fetch text/code content from storage.';
+        }
+      }
+      res.json({ downloadUrl: finalUrl, isLocal: !isAWSConfigured(), textContent });
     } else {
       res.redirect(finalUrl);
     }
@@ -293,20 +327,24 @@ export const deleteFile = async (req, res) => {
       return res.status(400).json({ message: 'File must be moved to trash before permanent deletion' });
     }
 
-    // 1. Delete object from storage
-    if (isAWSConfigured()) {
-      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
-      const deleteCommand = new DeleteObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: file.s3Key,
-      });
-      await getS3Client().send(deleteCommand);
-    } else {
-      // Delete mock file from local upload directory
-      const filePath = path.join(process.cwd(), 'uploads', file.s3Key);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    // 1. Delete object from storage (wrapped in try-catch to be robust if file is already deleted or storage is unreachable)
+    try {
+      if (isAWSConfigured()) {
+        const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+        const deleteCommand = new DeleteObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: file.s3Key,
+        });
+        await getS3Client().send(deleteCommand);
+      } else {
+        // Delete mock file from local upload directory
+        const filePath = path.join(process.cwd(), 'uploads', file.s3Key);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
       }
+    } catch (storageError) {
+      console.warn('Physical storage deletion failed or file not found, proceeding with database registry removal:', storageError);
     }
 
     // 2. Delete registry from MongoDB database
