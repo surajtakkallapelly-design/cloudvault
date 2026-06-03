@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-const apiBaseUrl = 'http://localhost:5001';
+const apiBaseUrl = process.env.BASE_URL || 'http://localhost:5001';
 const jwtSecret = 'super_secret_jwt_key_for_micro_google_drive';
 
 async function request(url, options = {}) {
