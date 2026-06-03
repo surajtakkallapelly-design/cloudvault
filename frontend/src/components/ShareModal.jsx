@@ -24,7 +24,7 @@ export default function ShareModal({ isOpen, onClose, file, onShareToggle }) {
   if (!isOpen || !file) return null;
 
   const isFolder = file.name !== undefined && file.fileName === undefined;
-  const shareUrl = isFolder ? '' : `${apiBaseUrl}/api/files/download/${encodeURIComponent(file.s3Key)}`;
+  const shareUrl = isFolder ? '' : `${window.location.origin}/shared-preview/${file._id}`;
 
   const handleCopy = () => {
     if (isFolder) return;
