@@ -4,13 +4,13 @@ import DashboardLayout from '../components/DashboardLayout';
 import DropzoneUpload from '../components/DropzoneUpload';
 import FileGrid from '../components/FileGrid';
 import ShareModal from '../components/ShareModal';
-import { FolderPlus, ChevronRight, Cloud, Lock, CheckCircle, AlertTriangle, RefreshCw, Download, ArrowUpDown, Trash, RotateCcw, FolderClosed, Users, Check, Filter } from 'lucide-react';
+import { FolderPlus, ChevronRight, Cloud, Lock, CheckCircle, AlertTriangle, RefreshCw, Download, ArrowUpDown, Trash, RotateCcw, FolderClosed, Users, Check, Filter, LogOut } from 'lucide-react';
 import { UploadProvider } from '../context/UploadContext';
 import UploadDrawer from '../components/UploadDrawer';
 import FilePreviewModal from '../components/FilePreviewModal';
 
 export default function Dashboard() {
-  const { api, user, updateUser } = useAuth();
+  const { api, user, updateUser, logout } = useAuth();
   const [currentTab, setCurrentTab] = useState('my-files');
   const [searchVal, setSearchVal] = useState('');
   const [files, setFiles] = useState([]);
@@ -447,6 +447,27 @@ export default function Dashboard() {
       {currentTab === 'settings' ? (
         /* Settings panel content view */
         <div className="glass-card bg-white dark:bg-zinc-950/40 rounded-3xl p-6 md:p-8 border border-zinc-200/60 dark:border-zinc-850 shadow-sm space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          {/* Storage Capacity Gauge (Mobile Only) */}
+          <div className="md:hidden flex flex-col gap-2.5 p-4 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-200/60 dark:border-zinc-900/40">
+            <div className="flex items-center justify-between text-xs font-bold text-zinc-805 dark:text-zinc-200">
+              <span className="flex items-center gap-1.5 text-indigo-500 dark:text-indigo-400">
+                <Cloud className="h-4 w-4" />
+                Storage Space
+              </span>
+              <span>{Math.min((totalSize / (20 * 1024 * 1024 * 1024)) * 100, 100).toFixed(1)}%</span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
+                style={{ width: `${Math.min((totalSize / (20 * 1024 * 1024 * 1024)) * 100, 100).toFixed(1)}%` }}
+              ></div>
+            </div>
+            <div className="flex justify-between text-[10px] text-zinc-500 font-semibold">
+              <span>{formatBytes(totalSize)} of 20 GB</span>
+              <span>{filesCount} files</span>
+            </div>
+          </div>
+
           <div className="border-b border-zinc-200 dark:border-zinc-900 pb-4">
             <h2 className="text-sm font-extrabold text-zinc-800 dark:text-zinc-200 uppercase tracking-widest">Profile Configuration</h2>
             <p className="text-xs text-zinc-500 mt-1">Manage your public user profile and identity credentials.</p>
@@ -595,7 +616,15 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="flex justify-end pt-4 border-t border-zinc-200 dark:border-zinc-900">
+          <div className="flex justify-between items-center pt-4 border-t border-zinc-200 dark:border-zinc-900">
+            <button
+              onClick={logout}
+              className="md:hidden flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/10 text-rose-600 dark:text-rose-450 hover:bg-rose-100 dark:hover:bg-rose-950/20 transition-all font-bold text-xs uppercase tracking-wider cursor-pointer"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              Sign Out
+            </button>
+            <div className="hidden md:block flex-1"></div>
             <button
               onClick={handleSaveSettings}
               disabled={savingSettings || !settingsName.trim()}

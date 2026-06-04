@@ -1,9 +1,9 @@
 import React from 'react';
-import { Search, Cloud, Sun, Moon } from 'lucide-react';
+import { Search, Cloud, Sun, Moon, Menu, FolderKanban, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function Header({ searchVal, setSearchVal, filesCount, totalSize }) {
-  const { theme, toggleTheme, user } = useAuth();
+export default function Header({ searchVal, setSearchVal, filesCount, totalSize, onMenuClick }) {
+  const { theme, toggleTheme, user, logout } = useAuth();
 
   // Format bytes to readable size
   const formatBytes = (bytes, decimals = 2) => {
@@ -20,19 +20,30 @@ export default function Header({ searchVal, setSearchVal, filesCount, totalSize 
   const storagePercent = Math.min((totalSize / storageLimit) * 100, 100).toFixed(1);
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-zinc-200 dark:border-zinc-900/60 bg-white/70 dark:bg-zinc-950/80 px-4 md:px-6 backdrop-blur-md transition-colors duration-300">
-      {/* Search Input */}
-      <div className="relative w-full max-w-[160px] xs:max-w-[200px] sm:max-w-xs md:max-w-sm">
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-          <Search className="h-4 w-4 text-zinc-500" />
+    <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-zinc-200 dark:border-zinc-900/60 bg-white/80 dark:bg-zinc-950/80 px-4 md:px-6 backdrop-blur-md transition-colors duration-300">
+      {/* Menu & Search Container */}
+      <div className="flex items-center gap-2.5 flex-1 max-w-[280px] xs:max-w-[320px] sm:max-w-xs md:max-w-sm">
+        {/* Mobile Logo Icon & Brand */}
+        <div className="flex md:hidden items-center gap-1.5 shrink-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-650 text-white shadow-md shadow-indigo-650/15">
+            <FolderKanban className="h-4.5 w-4.5" />
+          </div>
+          <span className="hidden xs:block text-xs font-extrabold text-zinc-900 dark:text-white tracking-wide">CloudVault</span>
         </div>
-        <input
-          type="text"
-          value={searchVal}
-          onChange={(e) => setSearchVal(e.target.value)}
-          className="block w-full rounded-xl border-0 bg-zinc-100 dark:bg-zinc-900/50 pl-10 pr-3 py-2 text-xs md:text-sm text-zinc-800 dark:text-white placeholder-zinc-500 ring-1 ring-inset ring-zinc-200 dark:ring-zinc-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
-          placeholder="Search files..."
-        />
+
+        {/* Search Input */}
+        <div className="relative w-full">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+            <Search className="h-4 w-4 text-zinc-550" />
+          </div>
+          <input
+            type="text"
+            value={searchVal}
+            onChange={(e) => setSearchVal(e.target.value)}
+            className="block w-full rounded-xl border-0 bg-zinc-100 dark:bg-zinc-900/50 pl-10 pr-3 py-2 text-xs md:text-sm text-zinc-800 dark:text-white placeholder-zinc-500 ring-1 ring-inset ring-zinc-200 dark:ring-zinc-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
+            placeholder="Search files..."
+          />
+        </div>
       </div>
 
       {/* Right control panel */}
@@ -69,6 +80,15 @@ export default function Header({ searchVal, setSearchVal, filesCount, totalSize 
           title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
         >
           {theme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+        </button>
+
+        {/* Logout Button (Mobile only) */}
+        <button
+          onClick={logout}
+          className="flex md:hidden h-10 w-10 items-center justify-center rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/10 text-rose-600 dark:text-rose-450 hover:bg-rose-100 dark:hover:bg-rose-950/20 transition-all cursor-pointer shadow-sm"
+          title="Sign Out"
+        >
+          <LogOut className="h-4.5 w-4.5" />
         </button>
       </div>
     </header>

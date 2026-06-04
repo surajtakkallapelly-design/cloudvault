@@ -57,6 +57,13 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'Please provide all required fields' });
     }
 
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({ 
+        message: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.' 
+      });
+    }
+
     // Check if user already exists
     const userExists = await User.findOne({ email });
 
@@ -209,8 +216,11 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'Please provide email, OTP, and new password' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({ 
+        message: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.' 
+      });
     }
 
     const user = await User.findOne({ email });

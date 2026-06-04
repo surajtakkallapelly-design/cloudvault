@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+@theme {
+  --color-indigo-650: #493fdb;
+  --color-indigo-550: #595be8;
+  --color-indigo-855: #342fa0;
+  --color-zinc-550: #61616a;
+  --color-zinc-555: #52525b;
+  --color-zinc-205: #dedee1;
+  --color-zinc-250: #dadade;
+  --color-zinc-150: #ececf0;
+  --color-rose-450: #f65568;
+  --color-emerald-450: #20c48e;
+  --color-violet-650: #7431e3;
+  --breakpoint-xs: 375px;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
