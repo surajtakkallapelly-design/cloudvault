@@ -601,12 +601,7 @@ export default function AuthPage() {
               )}
             </div>
 
-            {/* Quick Demo Helper Tag */}
-            <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-900/60 text-center">
-              <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                Tip: Try sandbox with <strong className="text-zinc-700 dark:text-zinc-300 font-bold">surajtakkallapelly@gmail.com / 123456</strong>
-              </span>
-            </div>
+
           </div>
         </div>
       </main>
