@@ -2,10 +2,10 @@ import axios from 'axios';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5001';
 const TEST_EMAIL = 'surajtakkallapelly@gmail.com';
-const TEST_PASS = '123456';
+const TEST_PASS = 'CloudVault@2026!';
 
 const COLLAB_EMAIL = 'collab-suraj@example.com';
-const COLLAB_PASS = '123456';
+const COLLAB_PASS = 'CloudVault@2026!';
 
 async function runTests() {
   console.log(`\n=================== STARTING INTENSE E2E TESTING ===================`);

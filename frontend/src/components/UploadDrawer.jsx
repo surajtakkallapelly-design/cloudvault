@@ -69,7 +69,7 @@ export default function UploadDrawer() {
   const totalCount = uploadQueue.length;
 
   return (
-    <div className={`fixed bottom-4 right-4 z-50 w-full max-w-sm md:max-w-md rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-white/95 dark:bg-zinc-950/95 shadow-2xl backdrop-blur-md transition-all duration-300 ${
+    <div className={`fixed bottom-20 md:bottom-4 right-4 z-50 w-[calc(100%-2rem)] max-w-sm md:max-w-md rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-white/95 dark:bg-zinc-950/95 shadow-2xl backdrop-blur-md transition-all duration-300 ${
       isDrawerExpanded ? 'h-[360px]' : 'h-14'
     }`}>
       {/* Header Bar */}

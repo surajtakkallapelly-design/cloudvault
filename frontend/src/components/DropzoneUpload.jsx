@@ -12,9 +12,9 @@ export default function DropzoneUpload({ activeFolder, totalSize }) {
     const handleTrigger = () => {
       onButtonClick();
     };
-    window.addEventListener('trigger-mobile-upload', handleTrigger);
+    window.addEventListener('mobile-upload-trigger', handleTrigger);
     return () => {
-      window.removeEventListener('trigger-mobile-upload', handleTrigger);
+      window.removeEventListener('mobile-upload-trigger', handleTrigger);
     };
   }, []);
 
@@ -98,14 +98,7 @@ export default function DropzoneUpload({ activeFolder, totalSize }) {
         </div>
       </div>
 
-      {/* Floating action button for mobile uploads */}
-      <button
-        onClick={onButtonClick}
-        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 hover:scale-105 active:scale-95 transition-all cursor-pointer border border-indigo-500/25 md:hidden"
-        title="Upload Documents"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {/* Mobile upload FAB removed — bottom nav Upload button handles this */}
     </div>
   );
 }

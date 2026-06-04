@@ -35,7 +35,7 @@ async function runTests() {
   const randomSuffix = Math.floor(Math.random() * 100000);
   const ownerEmail = `owner-${randomSuffix}@example.com`;
   const targetEmail = `unreg-target-${randomSuffix}@example.com`;
-  const password = 'password123';
+  const password = 'CloudVault@2026!';
 
   try {
     // 1. Register Owner

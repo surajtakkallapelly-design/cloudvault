@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Cloud, Sun, Moon, Menu, FolderKanban, LogOut } from 'lucide-react';
+import { Search, Cloud, Sun, Moon, FolderKanban, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Header({ searchVal, setSearchVal, filesCount, totalSize, onMenuClick }) {
@@ -20,38 +20,52 @@ export default function Header({ searchVal, setSearchVal, filesCount, totalSize,
   const storagePercent = Math.min((totalSize / storageLimit) * 100, 100).toFixed(1);
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-zinc-200 dark:border-zinc-900/60 bg-white/80 dark:bg-zinc-950/80 px-4 md:px-6 backdrop-blur-md transition-colors duration-300">
-      {/* Menu & Search Container */}
-      <div className="flex items-center gap-2.5 flex-1 max-w-[280px] xs:max-w-[320px] sm:max-w-xs md:max-w-sm">
-        {/* Mobile Logo Icon & Brand */}
+    <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-zinc-200 dark:border-zinc-900/60 bg-white/90 dark:bg-zinc-950/90 px-3 md:px-6 backdrop-blur-md transition-colors duration-300 gap-2">
+
+      {/* Left: Hamburger (mobile) + Logo + Search */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+
+        {/* Hamburger — mobile only, opens sidebar drawer */}
+        <button
+          onClick={onMenuClick}
+          className="flex md:hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/40 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer"
+          title="Open Menu"
+          aria-label="Open menu"
+        >
+          <Menu className="h-4.5 w-4.5" />
+        </button>
+
+        {/* CloudVault Logo — always visible on mobile */}
         <div className="flex md:hidden items-center gap-1.5 shrink-0">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-650 text-white shadow-md shadow-indigo-650/15">
-            <FolderKanban className="h-4.5 w-4.5" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20">
+            <FolderKanban className="h-4 w-4" />
           </div>
-          <span className="hidden xs:block text-xs font-extrabold text-zinc-900 dark:text-white tracking-wide">CloudVault</span>
+          <span className="text-xs font-extrabold text-zinc-900 dark:text-white tracking-wide">CloudVault</span>
         </div>
 
         {/* Search Input */}
-        <div className="relative w-full">
+        <div className="relative w-full max-w-[200px] xs:max-w-xs sm:max-w-sm md:max-w-md">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-            <Search className="h-4 w-4 text-zinc-550" />
+            <Search className="h-4 w-4 text-zinc-400" />
           </div>
           <input
             type="text"
             value={searchVal}
             onChange={(e) => setSearchVal(e.target.value)}
-            className="block w-full rounded-xl border-0 bg-zinc-100 dark:bg-zinc-900/50 pl-10 pr-3 py-2 text-xs md:text-sm text-zinc-800 dark:text-white placeholder-zinc-500 ring-1 ring-inset ring-zinc-200 dark:ring-zinc-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
+            className="block w-full rounded-xl border-0 bg-zinc-100 dark:bg-zinc-900/50 pl-9 pr-3 py-2 text-xs md:text-sm text-zinc-800 dark:text-white placeholder-zinc-400 ring-1 ring-inset ring-zinc-200 dark:ring-zinc-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
             placeholder="Search files..."
+            aria-label="Search files"
           />
         </div>
       </div>
 
-      {/* Right control panel */}
-      <div className="flex items-center gap-2 md:gap-4">
-        {/* Storage Capacity Gauge */}
+      {/* Right: Storage gauge (desktop), Theme toggle, Logout (mobile) */}
+      <div className="flex items-center gap-2 shrink-0">
+
+        {/* Storage Capacity Gauge — desktop only */}
         <div className="hidden md:flex items-center gap-4 bg-zinc-100/50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-900/50 rounded-xl px-4 py-2">
           <div className="flex items-center gap-2 text-indigo-400">
-            <Cloud className="h-4.5 w-4.5" />
+            <Cloud className="h-4 w-4" />
             <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-300">Storage Used</span>
           </div>
           
@@ -73,22 +87,24 @@ export default function Header({ searchVal, setSearchVal, filesCount, totalSize,
           </div>
         </div>
 
-        {/* Theme Toggle Button */}
+        {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/40 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-800 dark:hover:text-white transition-all cursor-pointer shadow-sm"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/40 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-800 dark:hover:text-white transition-all cursor-pointer shadow-sm"
           title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          aria-label="Toggle theme"
         >
-          {theme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        {/* Logout Button (Mobile only) */}
+        {/* Logout — mobile only (desktop uses sidebar) */}
         <button
           onClick={logout}
-          className="flex md:hidden h-10 w-10 items-center justify-center rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/10 text-rose-600 dark:text-rose-450 hover:bg-rose-100 dark:hover:bg-rose-950/20 transition-all cursor-pointer shadow-sm"
+          className="flex md:hidden h-9 w-9 items-center justify-center rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/30 transition-all cursor-pointer shadow-sm"
           title="Sign Out"
+          aria-label="Sign out"
         >
-          <LogOut className="h-4.5 w-4.5" />
+          <LogOut className="h-4 w-4" />
         </button>
       </div>
     </header>
