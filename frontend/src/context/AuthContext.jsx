@@ -69,7 +69,15 @@ export const AuthProvider = ({ children }) => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        const parsed = JSON.parse(storedUser);
+        // ── 24-hour auto-logout check ──
+        if (parsed.loginExpiresAt && new Date() > new Date(parsed.loginExpiresAt)) {
+          // Session expired — clear and force re-login
+          localStorage.removeItem('user');
+          console.log('[Auth] Session expired after 24h. User logged out.');
+        } else {
+          setUser(parsed);
+        }
       } catch (err) {
         localStorage.removeItem('user');
       }

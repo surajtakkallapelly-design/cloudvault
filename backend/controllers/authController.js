@@ -39,10 +39,10 @@ try {
   console.error('Firebase Admin initialization error:', error.message);
 }
 
-// Generate JWT token
+// Generate JWT token — expires in 24 hours
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'your_jwt_secret_key_here', {
-    expiresIn: '7d',
+    expiresIn: '24h',
   });
 };
 
@@ -96,11 +96,17 @@ export const registerUser = async (req, res) => {
         console.error('Failed to link pending shares on signup:', dbErr);
       }
 
+      // Save last login time on signup
+      user.lastLogin = new Date();
+      await user.save({ validateBeforeSave: false });
+
       res.status(201).json({
         _id: user._id,
         name: user.name,
         email: user.email,
         token: generateToken(user._id),
+        lastLogin: user.lastLogin,
+        loginExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
     } else {
       res.status(400).json({ message: 'Invalid user data provided' });
@@ -127,11 +133,17 @@ export const loginUser = async (req, res) => {
 
     // Check password
     if (user && (await user.matchPassword(password))) {
+      // Save last login time
+      user.lastLogin = new Date();
+      await user.save({ validateBeforeSave: false });
+
       res.json({
         _id: user._id,
         name: user.name,
         email: user.email,
         token: generateToken(user._id),
+        lastLogin: user.lastLogin,
+        loginExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
     } else {
       res.status(401).json({ message: 'Invalid email or password' });
@@ -245,12 +257,17 @@ export const resetPassword = async (req, res) => {
 
     console.log(`[OTP Verification] User ${email} password successfully reset!`);
 
-    // Authenticate user directly and return token
+    // Authenticate user directly after password reset and return token
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
+
     res.json({
       _id: user._id,
       name: user.name,
       email: user.email,
       token: generateToken(user._id),
+      lastLogin: user.lastLogin,
+      loginExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     });
   } catch (error) {
     console.error('Reset password error:', error);

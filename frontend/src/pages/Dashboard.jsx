@@ -616,6 +616,53 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Security and Session Info */}
+          <div className="border-t border-zinc-200 dark:border-zinc-900 pt-6">
+            <div className="border-b border-zinc-200 dark:border-zinc-900 pb-4 mb-4">
+              <h2 className="text-sm font-extrabold text-zinc-800 dark:text-zinc-200 uppercase tracking-widest">Security &amp; Session</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Your session info and cookie preferences for this device.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-start gap-3 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-900/50">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Last Login</p>
+                  <p className="text-sm font-bold text-zinc-900 dark:text-white mt-1">
+                    {user?.lastLogin ? new Date(user.lastLogin).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'This session'}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 mt-1 font-semibold">
+                    Session expires: {user?.loginExpiresAt ? new Date(user.loginExpiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '24h from login'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-900/50">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500">
+                  <Cloud className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Cookie Preferences</p>
+                  {(() => {
+                    const consent = localStorage.getItem('cloudvault-cookie-consent');
+                    const consentDate = localStorage.getItem('cloudvault-cookie-date');
+                    return (
+                      <div>
+                        <p className={consent === 'accepted' ? 'text-sm font-bold mt-1 text-emerald-600 dark:text-emerald-400' : consent === 'declined' ? 'text-sm font-bold mt-1 text-rose-500' : 'text-sm font-bold mt-1 text-zinc-500'}>
+                          {consent === 'accepted' ? '✅ Cookies Accepted' : consent === 'declined' ? '❌ Cookies Declined' : '⏳ No choice made'}
+                        </p>
+                        {consentDate && <p className="text-[10px] text-zinc-500 mt-0.5 font-semibold">{new Date(consentDate).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>}
+                        <button onClick={() => { localStorage.removeItem('cloudvault-cookie-consent'); localStorage.removeItem('cloudvault-cookie-date'); window.location.reload(); }} className="mt-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer border-0 bg-transparent p-0">
+                          Reset cookie preference →
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-between items-center pt-4 border-t border-zinc-200 dark:border-zinc-900">
             <button
               onClick={logout}

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import SharedPreviewPage from './pages/SharedPreviewPage';
+import CookieConsent from './components/CookieConsent';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
@@ -23,7 +24,13 @@ function AppContent() {
     return <SharedPreviewPage fileId={fileId} />;
   }
 
-  return user ? <Dashboard /> : <AuthPage />;
+  return (
+    <>
+      {user ? <Dashboard /> : <AuthPage />}
+      {/* Cookie consent banner — shown on every page until user makes a choice */}
+      <CookieConsent />
+    </>
+  );
 }
 
 export default function App() {
