@@ -9,7 +9,6 @@ import {
   Star,
   Trash2,
   Settings as SettingsIcon,
-  Cloud,
   X
 } from 'lucide-react';
 
@@ -108,28 +107,7 @@ export default function Sidebar({ currentTab, setCurrentTab, isOpen, onClose, to
           })}
         </nav>
 
-        {/* Storage Gauge */}
-        {totalSize !== undefined && (
-          <div className="flex flex-col gap-2 p-3.5 mb-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-900/50">
-            <div className="flex items-center justify-between text-xs font-bold text-zinc-800 dark:text-zinc-200">
-              <span className="flex items-center gap-1.5 text-indigo-500 dark:text-indigo-400">
-                <Cloud className="h-4 w-4" />
-                Storage
-              </span>
-              <span>{storagePercent}%</span>
-            </div>
-            <div className="h-1.5 w-full rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
-                style={{ width: `${storagePercent}%` }}
-              ></div>
-            </div>
-            <div className="flex justify-between text-[10px] text-zinc-500 font-semibold">
-              <span>{formatBytes(totalSize)} of {formatBytes(storageLimit)}</span>
-              <span>{filesCount} files</span>
-            </div>
-          </div>
-        )}
+
 
         {/* Profile Box + Sign Out */}
         <div className="border-t border-zinc-200/80 dark:border-zinc-900 pt-4">

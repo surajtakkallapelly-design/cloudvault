@@ -22,7 +22,7 @@ export default function Header({ searchVal, setSearchVal, filesCount, totalSize,
   return (
     <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-zinc-200 dark:border-zinc-900/60 bg-white/90 dark:bg-zinc-950/90 px-3 md:px-6 backdrop-blur-md transition-colors duration-300 gap-2">
 
-      {/* Left: Hamburger (mobile) + Logo + Search */}
+      {/* Left: Hamburger (mobile) + CloudVault Logo (ALL screens) + Search */}
       <div className="flex items-center gap-2 flex-1 min-w-0">
 
         {/* Hamburger — mobile only, opens sidebar drawer */}
@@ -35,16 +35,24 @@ export default function Header({ searchVal, setSearchVal, filesCount, totalSize,
           <Menu className="h-4.5 w-4.5" />
         </button>
 
-        {/* CloudVault Logo — always visible on mobile */}
-        <div className="flex md:hidden items-center gap-1.5 shrink-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20">
+        {/* ── CloudVault Logo — visible on ALL screen sizes (mobile + desktop) ── */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-600/25 shrink-0">
             <FolderKanban className="h-4 w-4" />
           </div>
-          <span className="text-xs font-extrabold text-zinc-900 dark:text-white tracking-wide">CloudVault</span>
+          <div className="hidden sm:block">
+            <p className="text-sm font-extrabold text-zinc-900 dark:text-white tracking-wide leading-none">CloudVault</p>
+            <p className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-0.5">Micro Drive</p>
+          </div>
+          {/* Name only (no subtitle) on very small screens */}
+          <span className="block sm:hidden text-xs font-extrabold text-zinc-900 dark:text-white tracking-wide">CloudVault</span>
         </div>
 
+        {/* Divider — desktop only */}
+        <div className="hidden md:block h-5 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
+
         {/* Search Input */}
-        <div className="relative w-full max-w-[200px] xs:max-w-xs sm:max-w-sm md:max-w-md">
+        <div className="relative flex-1 max-w-[160px] xs:max-w-[200px] sm:max-w-xs md:max-w-sm">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
             <Search className="h-4 w-4 text-zinc-400" />
           </div>
