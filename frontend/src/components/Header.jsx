@@ -35,21 +35,15 @@ export default function Header({ searchVal, setSearchVal, filesCount, totalSize,
           <Menu className="h-4.5 w-4.5" />
         </button>
 
-        {/* ── CloudVault Logo — visible on ALL screen sizes (mobile + desktop) ── */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* CloudVault Logo — mobile only (sidebar shows it on desktop) */}
+        <div className="flex md:hidden items-center gap-2 shrink-0">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-600/25 shrink-0">
             <FolderKanban className="h-4 w-4" />
           </div>
-          <div className="hidden sm:block">
-            <p className="text-sm font-extrabold text-zinc-900 dark:text-white tracking-wide leading-none">CloudVault</p>
-            <p className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-0.5">Micro Drive</p>
-          </div>
-          {/* Name only (no subtitle) on very small screens */}
-          <span className="block sm:hidden text-xs font-extrabold text-zinc-900 dark:text-white tracking-wide">CloudVault</span>
+          <span className="text-xs font-extrabold text-zinc-900 dark:text-white tracking-wide">CloudVault</span>
         </div>
 
-        {/* Divider — desktop only */}
-        <div className="hidden md:block h-5 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
+
 
         {/* Search Input */}
         <div className="relative flex-1 max-w-[160px] xs:max-w-[200px] sm:max-w-xs md:max-w-sm">
